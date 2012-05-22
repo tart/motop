@@ -9,42 +9,44 @@
 
 import sys
 import os
+import termios
+import json
+from bson import json_utile
 
-class Query:
-    def __init__ (self, server, opId, active, body = None, duration = None):
-        self.opId = opId
+class Operation:
+    def __init__ (self, server, opid, active, query = None, duration = None):
+        self.opid = opid
         self.active = active
         self.server = server
-        self.body = body
+        self.query = query
         self.duration = duration
 
     def line (self):
         string = str (self.server) + '\t'
-        string += str (self.opId) + '\t'
-        if len (str (self.opId)) < 8:
+        string += str (self.opid) + '\t'
+        if len (str (self.opid)) < 8:
             string += '\t'
         string += str (self.active) + '\t'
         string += str (self.duration) + '\t\t'
-        if self.body:
-            import json
-            string += json.dumps (self.body) [:80]
+        if self.query:
+            string += json.dumps (self.query, default = json_util.default) [:80]
         return string
 
-    def getBody (self):
-        if self.body:
-            import json
-            return json.dumps (self.body, sort_keys = True, indent = 4)
+    def getQueryJSON (self):
+        if self.query:
+            return json.dumps (self.query, default = json_util.default, sort_keys = True, indent = 4)
+
+    def kill (self):
+        return self.server.killOperation (self.opid)
 
 class NonBlockingConsole (object):
     def __enter__ (self):
-        import termios
         self.old_settings = termios.tcgetattr (sys.stdin)
         import tty
         tty.setcbreak (sys.stdin.fileno())
         return self
 
     def __exit__ (self, type, value, traceback):
-        import termios
         termios.tcsetattr (sys.stdin, termios.TCSADRAIN, self.old_settings)
 
     def getInput (self):
@@ -53,72 +55,81 @@ class NonBlockingConsole (object):
             return sys.stdin.read (1)
 
 class Server:
-    def __init__ (self, address, databaseName):
+    def __init__ (self, address):
         from pymongo import Connection
         from pymongo.database import Database
         self.__address = address
-        self.__database = Database (Connection (address), 'tuttur')
+        self.__database = Database (Connection (address), 'test')
 
-    def getQueries (self):
-        queries = []
+    def getOperations (self):
+        operations = []
         for op in self.__database.current_op () ['inprog']:
-            opId = op ['opid']
+            opid = op ['opid']
             body = None
             if op.has_key ('query'):
-                body = op ['query']
+                query = op ['query']
             duration = None
             if op.has_key ('secs_running'):
                 duration = op ['secs_running']
-            queries.append((Query (self, opId, op ['active'], body, duration)))
-        return queries
+            operations.append((Operation (self, opid, op ['active'], query, duration)))
+        return operations
+
+    def killOperation (self, opid):
+        os.system ('echo "db.killOp (' + str (opid) + ')" | mongo ' + self.__address)
 
     def __str__ (self):
         return self.__address
 
-class QueryScreen:
-    def __init__ (self, queries):
-        self.__queries = sorted (queries, key = lambda query: query.duration, reverse = True)
-
-    def showQueries (self):
+class OperationScreenFrame:
+    def __init__ (self, operations):
+        self.__operations = sorted (operations, key = lambda operation: operation.duration, reverse = True)
         os.system ('clear')
         print 'Server\t\tOpId\t\tActive\tDuration\tQuery'
-        for query in self.__queries:
-            print query.line ()
+        for operation in self.__operations:
+            print operation.line ()
 
-    def findQuery (self, server, opId):
-        for query in self.__queries:
-            if str (query.server) == server and str (query.opId) == opId:
-                return query
+    def askForOperation (self):
+        server = raw_input ('Server: ')
+        if server:
+            opid = raw_input ('OpId: ')
+            if opid:
+                for operation in self.__operations:
+                    if str (operation.server) == server and str (operation.opid) == opid:
+                        return operation
 
-    def showQuery (self, server, opId):
-        query = self.findQuery (server, opId)
-        if query:
-            print query.getBody ()
+    def showQuery (self):
+        running = True
+        while running:
+            operation = self.askForOperation ()
+            if operation:
+                print operation.getQueryJSON ()
+            else:
+                running = False
+
+    def killOperation (self):
+        if self.askForOperation ():
+            operation.kill ()
 
 serverAddress = ('10.42.2.207', '10.42.2.121', '10.42.2.122', '10.42.2.123')
 
 if __name__ == '__main__':
     servers = []
     for serverAddres in serverAddress:
-        servers.append (Server (serverAddres, 'test'))
+        servers.append (Server (serverAddres))
 
+    from time import sleep
     running = True
     while running:
         with NonBlockingConsole () as nonBlockingConsole:
-            screen = QueryScreen ([query for server in servers for query in server.getQueries ()])
-            screen.showQueries ()
-            from time import sleep
-            sleep (1)
-
+            frame = OperationScreenFrame ([operation for server in servers for operation in server.getOperations ()])
             input = nonBlockingConsole.getInput ()
+            sleep (1)
+            if not input:
+                input = nonBlockingConsole.getInput ()
         if input == 'q':
             running = False
         elif input == 'e':
-            showingQuery = True
-            while showingQuery:
-                server = raw_input ('Server: ')
-                if server:
-                    opId = raw_input ('OpId: ')
-                    screen.showQuery (server, opId)
-                else:
-                    showingQuery = False
+            frame.showQuery ()
+        elif input == 'k':
+            frame.killOperation ()
+            sleep (1)
