@@ -7,7 +7,7 @@ Actions:
 
 q	Quit
 
-e	Show full query
+e	Explain the query
 
 k   Kill using "mongo" executable
 
