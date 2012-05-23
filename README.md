@@ -1,7 +1,7 @@
 MongoDBTop
 ==========
 
-"Top" clone for MongoDB. Shows operations from several MongoDB servers descending ordered by durations.
+Realtime monitoring tool for several MongoDB servers. Shows current operations ordered by durations every second.
 
 Actions:
 
