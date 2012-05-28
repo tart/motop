@@ -34,7 +34,7 @@ class Operation:
         print str.ljust (str (self.__opid), 10),
 
     def kill (self):
-        return self.server.killOperation (self.__opid)
+        return self.__server.killOperation (self.__opid)
 
 class Query (Operation):
     def __init__ (self, server, opid, namespace, body, duration = None):
@@ -77,14 +77,16 @@ class Query (Operation):
         return False
 
 class Server:
-    def __init__ (self, address):
+    def __init__ (self, name, address):
         from pymongo import Connection
+        assert len (name) < 14
+        self.__name = name
         self.__address = address
         self.__connection = Connection (address)
 
     def printLine (self):
         serverStatus = self.__connection.admin.command ('serverStatus')
-        print str.ljust (self.__address, 14),
+        print str.ljust (self.__name, 14),
         print str.ljust (str (serverStatus ['connections'] ['current']), 4) + '/',
         print str.ljust (str (serverStatus ['connections'] ['available']), 6),
         print str.ljust (str (serverStatus ['mem'] ['resident']), 6) + '/',
@@ -111,10 +113,16 @@ class Server:
         os.system ('echo "db.killOp (' + str (opid) + ')" | mongo ' + self.__address)
 
     def __str__ (self):
-        return self.__address
+        return self.__name
+
+servers = {Server ('MongoDBMaster', '10.42.2.207'),
+           Server ('MongoDB01' , '10.42.2.121'),
+           Server ('MongoDB02', '10.42.2.122'),
+           Server ('MongoDB03', '10.42.2.123'),
+           Server ('DBAlpha', '10.42.2.206')}
 
 class Frame:
-    def __init__ (self, servers, operations):
+    def __init__ (self, operations):
         self.__operations = sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True)
         os.system ('clear')
         print 'Server         Connections  Memory'
@@ -168,19 +176,13 @@ class Console:
                 if opid:
                     return Operation (serverName, opid)
 
-serverAddress = ('10.42.2.207', '10.42.2.121', '10.42.2.122', '10.42.2.123')
-
 if __name__ == '__main__':
-    servers = []
-    for serverAddres in serverAddress:
-        servers.append (Server (serverAddres))
-
     from time import sleep
     input = None
     with ConsoleActivator () as console:
         while input != 'q':
             if not input:
-                frame = Frame (servers, [operation for server in servers for operation in server.currentOperations ()])
+                frame = Frame ([operation for server in servers for operation in server.currentOperations ()])
                 sleep (1)
                 input = console.checkInput ()
             if input in ('e', 'k'):
