@@ -82,6 +82,15 @@ class Server:
         self.__address = address
         self.__connection = Connection (address)
 
+    def printLine (self):
+        serverStatus = self.__connection.admin.command ('serverStatus')
+        print str.ljust (self.__address, 14),
+        print str.ljust (str (serverStatus ['connections'] ['current']), 4) + '/',
+        print str.ljust (str (serverStatus ['connections'] ['available']), 6),
+        print str.ljust (str (serverStatus ['mem'] ['resident']), 6) + '/',
+        print str.ljust (str (serverStatus ['mem'] ['mapped']), 8),
+        return
+
     def explainQuery (self, databaseName, collectionName, query):
         database = getattr (self.__connection, databaseName)
         collection = getattr (database, collectionName)
@@ -89,7 +98,7 @@ class Server:
         return cursor.explain ()
 
     def currentOperations (self):
-        for op in self.__connection.local.current_op () ['inprog']:
+        for op in self.__connection.admin.current_op () ['inprog']:
             if op ['op'] == 'query':
                 if op.has_key ('secs_running'):
                     yield Query (self, op ['opid'], op ['ns'], op ['query'], op ['secs_running'])
@@ -105,9 +114,14 @@ class Server:
         return self.__address
 
 class Frame:
-    def __init__ (self, operations):
+    def __init__ (self, servers, operations):
         self.__operations = sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True)
         os.system ('clear')
+        print 'Server         Connections  Memory'
+        for server in servers:
+            server.printLine ()
+            print
+        print
         print 'Server         OpId       Namespace          Sec  Query'
         for operation in self.__operations:
             operation.printLine ()
@@ -166,7 +180,7 @@ if __name__ == '__main__':
     with ConsoleActivator () as console:
         while input != 'q':
             if not input:
-                frame = Frame ([operation for server in servers for operation in server.currentOperations ()])
+                frame = Frame (servers, [operation for server in servers for operation in server.currentOperations ()])
                 sleep (1)
                 input = console.checkInput ()
             if input in ('e', 'k'):
