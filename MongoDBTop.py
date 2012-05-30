@@ -8,9 +8,10 @@
 ##
 
 from __future__ import print_function
-import __builtin__
-if hasattr (__builtin__, 'raw_input'):
+try:
+    import __builtin__
     __builtin__.input = __builtin__.raw_input
+except ImportError: pass
 
 import sys
 import os
@@ -19,22 +20,61 @@ import termios
 import select
 import json
 from bson import json_util
+from time import sleep
 
 class Value (int):
     def __str__ (self):
         if self > 10 ** 12:
-            return str (round (self / 10 ** 12)) [:-2] + 'T'
+            return str (int (round (self / 10 ** 12))) + 'T'
         if self > 10 ** 9:
-            return str (round (self / 10 ** 9)) [:-2] + 'G'
+            return str (int (round (self / 10 ** 9))) + 'G'
         if self > 10 ** 6:
-            return str (round (self / 10 ** 6)) [:-2] + 'M'
+            return str (int (round (self / 10 ** 6))) + 'M'
         if self > 10 ** 3:
-            return str (round (self / 10 ** 3)) [:-2] + 'K'
+            return str (int (round (self / 10 ** 3))) + 'K'
         return int.__str__ (self)
 
 class Printable:
     def line (self): pass
     def sortOrder (self): pass
+
+class ListPrinter:
+    def __init__ (self, columnHeaders, maxLine = None):
+        self.__columnHeaders = columnHeaders
+        self.__columnWidths = [len (columnHeader) + 2 for columnHeader in self.__columnHeaders]
+        self.__maxLine = maxLine
+
+    def reset (self, printables):
+        self.__printables = sorted (printables, key = lambda printable: printable.sortOrder (), reverse = True)
+        if self.__maxLine:
+            self.__printables = self.__printables [:self.__maxLine]
+        for printable in self.__printables:
+            assert isinstance (printable, Printable)
+            for index, cell in enumerate (printable.line ()):
+                assert isinstance (cell, str)
+                if len (cell) + 2 > self.__columnWidths [index]:
+                    self.__columnWidths [index] = len (cell) + 2
+
+    def printLines (self):
+        for index, columnHeader in enumerate (self.__columnHeaders):
+            print (columnHeader.ljust (self.__columnWidths [index]), end = '')
+        print ()
+        for printable in self.__printables:
+            for index, cell in enumerate (printable.line ()):
+                print (cell.ljust (self.__columnWidths [index]), end = '')
+            print ()
+
+    def getLine (self, line):
+        for printable in self.__printables:
+            printableLine = printable.line ()
+            different = False
+            index = 0
+            while not different and len (line) > index:
+                if printableLine [index] != line [index]:
+                    different = True
+                index += 1
+            if not different:
+                return printable
 
 class Operation (Printable):
     def __init__ (self, server, opid):
@@ -66,6 +106,7 @@ class Query (Operation):
     def sortOrder (self):
         return self.__duration if self.__duration else 0
 
+    listPrinter = ListPrinter (['Server', 'OpId', 'Namespace', 'Sec', 'Query'], maxLine = 30)
     def line (self):
         cells = Operation.line (self)
         cells.append (str (self.__namespace))
@@ -108,6 +149,7 @@ class Server (Printable):
     def sortOrder (self):
         return self.__name
 
+    listPrinter = ListPrinter (['Server', 'Connections', 'Memory'])
     def line (self):
         serverStatus = self.__connection.admin.command ('serverStatus')
         currentConnection = Value (serverStatus ['connections'] ['current'])
@@ -142,41 +184,6 @@ class Server (Printable):
     def __str__ (self):
         return self.__name
 
-class ListPrinter:
-    def __init__ (self, columnHeaders):
-        self.__columnHeaders = columnHeaders
-        self.__columnWidths = [len (columnHeader) + 2 for columnHeader in self.__columnHeaders]
-
-    def reset (self, printables):
-        self.__printables = sorted (printables, key = lambda printable: printable.sortOrder (), reverse = True)
-        for printable in self.__printables:
-            assert isinstance (printable, Printable)
-            for index, cell in enumerate (printable.line ()):
-                assert isinstance (cell, str)
-                if len (cell) + 2 > self.__columnWidths [index]:
-                    self.__columnWidths [index] = len (cell) + 2
-
-    def printLines (self):
-        for index, columnHeader in enumerate (self.__columnHeaders):
-            print (columnHeader.ljust (self.__columnWidths [index]), end = '')
-        print ()
-        for printable in self.__printables:
-            for index, cell in enumerate (printable.line ()):
-                print (cell.ljust (self.__columnWidths [index]), end = '')
-            print ()
-
-    def getLine (self, line):
-        for printable in self.__printables:
-            printableLine = printable.line ()
-            different = False
-            index = 0
-            while not different and len (line) > index:
-                if printableLine [index] != line [index]:
-                    different = True
-                index += 1
-            if not different:
-                return printable
-
 class ConsoleActivator:
     def __enter__ (self):
         self.__settings = termios.tcgetattr (sys.stdin)
@@ -199,6 +206,7 @@ class ConsoleDeactivator ():
 class Console:
     def __init__ (self, consoleActivator):
         self.__consoleDeactivator = ConsoleDeactivator (consoleActivator)
+        self.__listPrinters = (Server.listPrinter, Query.listPrinter)
 
     def getButton (self):
         button = sys.stdin.read (1)
@@ -208,6 +216,12 @@ class Console:
     def checkButton (self):
         if select.select ([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
             return self.getButton ()
+
+    def refresh (self):
+        os.system ('clear')
+        for listPrinter in self.__listPrinters:
+            listPrinter.printLines ()
+            print ()
 
     def askForOperation (self):
         with self.__consoleDeactivator:
@@ -225,33 +239,27 @@ servers = {Server ('MongoDBMaster', '10.42.2.207'),
            Server ('DBAlpha', '10.42.2.206')}
 
 if __name__ == '__main__':
-    serversPrinter = ListPrinter (['Server', 'Connections', 'Memory'])
-    operationsPrinter = ListPrinter (['Server', 'OpId', 'Namespace', 'Sec', 'Query'])
-    from time import sleep
     button = None
     with ConsoleActivator () as console:
         while button != 'q':
             if not button:
-                serversPrinter.reset ([server for server in servers ])
-                operationsPrinter.reset ([operation for server in servers for operation in server.currentOperations ()])
-                os.system ('clear')
-                serversPrinter.printLines ()
-                print ()
-                operationsPrinter.printLines ()
+                Server.listPrinter.reset ([server for server in servers ])
+                Query.listPrinter.reset ([operation for server in servers for operation in server.currentOperations ()])
+                console.refresh ()
                 sleep (1)
                 button = console.checkButton ()
             if button in ('e', 'k'):
                 operationInput = console.askForOperation ()
                 if operationInput:
-                    currentOperation = operationsPrinter.getLine (operationInput)
-                    if currentOperation:
+                    operation = Query.listPrinter.getLine (operationInput)
+                    if operation:
                         if button == 'e':
-                            if isinstance (currentOperation, Query):
-                                currentOperation.printExplain ()
+                            if isinstance (operation, Query):
+                                operation.printExplain ()
                             else:
                                 print ('Only queries with namespace can be explained.')
                         elif button == 'k':
-                            currentOperation.kill ()
+                            operation.kill ()
                     else:
                         print ('Invalid operation.')
                     button = console.getButton ()
