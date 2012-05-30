@@ -13,6 +13,7 @@ k   Kill using "mongo" executable
 
 Dependencies:
 
-* pymongo 2 [1]
+* python 2.6 or greater
+* pymongo 2.0 or greater [1]
 
 [1] http://pypi.python.org/pypi/pymongo/
