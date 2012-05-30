@@ -144,16 +144,15 @@ class Server (Printable):
         self.__name = name
         self.__address = address
         self.__connection = Connection (address)
-        self.__operationCount = None
+        self.__operationCount = 0
 
     def sortOrder (self):
         return self.__name
 
     def __getOperationCountChange (self, operationCounts):
         oldOperationCount = self.__operationCount
-        self.__operationCount = sum (operationCounts.itervalues ())
-        if oldOperationCount:
-            return self.__operationCount - oldOperationCount
+        self.__operationCount = sum ([value for key, value in operationCounts.items ()])
+        return self.__operationCount - oldOperationCount
 
     listPrinter = ListPrinter (['Server', 'QPS', 'Connections', 'Memory'])
     def line (self):
@@ -164,7 +163,7 @@ class Server (Printable):
         mappedMem = Value (serverStatus ['mem'] ['mapped'])
         cells = []
         cells.append (str (self))
-        cells.append (str(self.__getOperationCountChange (serverStatus ['opcounters']) or ''))
+        cells.append (str (Value (self.__getOperationCountChange (serverStatus ['opcounters']))))
         cells.append (str (currentConnection) + ' / ' + str (availableConnection))
         cells.append (str (residentMem) + ' / ' + str (mappedMem))
         return cells
