@@ -145,6 +145,7 @@ class Server (Printable):
         self.__address = address
         self.__connection = Connection (address)
         self.__operationCount = 0
+        self.__flushCount = 0
 
     def sortOrder (self):
         return self.__name
@@ -154,7 +155,12 @@ class Server (Printable):
         self.__operationCount = sum ([value for key, value in operationCounts.items ()])
         return self.__operationCount - oldOperationCount
 
-    listPrinter = ListPrinter (['Server', 'QPS', 'Connections', 'Memory'])
+    def __getFlushCountChange (self, flushCount):
+        oldFlushCount = self.__flushCount
+        self.__flushCount = flushCount
+        return self.__flushCount - oldFlushCount
+
+    listPrinter = ListPrinter (['Server', 'QPS', 'Clients', 'Queue', 'Flushes', 'Connections', 'Memory'])
     def line (self):
         serverStatus = self.__connection.admin.command ('serverStatus')
         currentConnection = Value (serverStatus ['connections'] ['current'])
@@ -164,6 +170,9 @@ class Server (Printable):
         cells = []
         cells.append (str (self))
         cells.append (str (Value (self.__getOperationCountChange (serverStatus ['opcounters']))))
+        cells.append (str (Value (serverStatus ['globalLock'] ['activeClients'] ['total'])))
+        cells.append (str (Value (serverStatus ['globalLock'] ['currentQueue'] ['total'])))
+        cells.append (str (Value (self.__getFlushCountChange (serverStatus ['backgroundFlushing'] ['flushes']))))
         cells.append (str (currentConnection) + ' / ' + str (availableConnection))
         cells.append (str (residentMem) + ' / ' + str (mappedMem))
         return cells
