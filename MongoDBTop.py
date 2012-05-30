@@ -165,7 +165,7 @@ class Server (Printable):
     def line (self):
         serverStatus = self.__connection.admin.command ('serverStatus')
         currentConnection = Value (serverStatus ['connections'] ['current'])
-        availableConnection = Value (serverStatus ['connections'] ['available'])
+        totalConnection = Value (serverStatus ['connections'] ['available'] + serverStatus ['connections'] ['current'])
         residentMem = Value (serverStatus ['mem'] ['resident'])
         mappedMem = Value (serverStatus ['mem'] ['mapped'])
         cells = []
@@ -174,7 +174,7 @@ class Server (Printable):
         cells.append (str (Value (serverStatus ['globalLock'] ['activeClients'] ['total'])))
         cells.append (str (Value (serverStatus ['globalLock'] ['currentQueue'] ['total'])))
         cells.append (str (Value (self.__getFlushCountChange (serverStatus ['backgroundFlushing'] ['flushes']))))
-        cells.append (str (currentConnection) + ' / ' + str (availableConnection))
+        cells.append (str (currentConnection) + ' / ' + str (totalConnection))
         cells.append (str (residentMem) + ' / ' + str (mappedMem))
         return cells
 
