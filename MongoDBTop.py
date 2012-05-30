@@ -50,10 +50,6 @@ class ListPrinter:
             self.__printables = self.__printables [:self.__maxLine]
         for printable in self.__printables:
             assert isinstance (printable, Printable)
-            for index, cell in enumerate (printable.line ()):
-                assert isinstance (cell, str)
-                if len (cell) + 2 > self.__columnWidths [index]:
-                    self.__columnWidths [index] = len (cell) + 2
 
     def printLines (self):
         for index, columnHeader in enumerate (self.__columnHeaders):
@@ -61,6 +57,9 @@ class ListPrinter:
         print ()
         for printable in self.__printables:
             for index, cell in enumerate (printable.line ()):
+                assert isinstance (cell, str)
+                if len (cell) + 2 > self.__columnWidths [index]:
+                    self.__columnWidths [index] = len (cell) + 2
                 print (cell.ljust (self.__columnWidths [index]), end = '')
             print ()
 
@@ -145,11 +144,18 @@ class Server (Printable):
         self.__name = name
         self.__address = address
         self.__connection = Connection (address)
+        self.__operationCount = None
 
     def sortOrder (self):
         return self.__name
 
-    listPrinter = ListPrinter (['Server', 'Connections', 'Memory'])
+    def __getOperationCountChange (self, operationCounts):
+        oldOperationCount = self.__operationCount
+        self.__operationCount = sum (operationCounts.itervalues ())
+        if oldOperationCount:
+            return self.__operationCount - oldOperationCount
+
+    listPrinter = ListPrinter (['Server', 'QPS', 'Connections', 'Memory'])
     def line (self):
         serverStatus = self.__connection.admin.command ('serverStatus')
         currentConnection = Value (serverStatus ['connections'] ['current'])
@@ -158,6 +164,7 @@ class Server (Printable):
         mappedMem = Value (serverStatus ['mem'] ['mapped'])
         cells = []
         cells.append (str (self))
+        cells.append (str(self.__getOperationCountChange (serverStatus ['opcounters']) or ''))
         cells.append (str (currentConnection) + ' / ' + str (availableConnection))
         cells.append (str (residentMem) + ' / ' + str (mappedMem))
         return cells
