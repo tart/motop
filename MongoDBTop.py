@@ -39,13 +39,14 @@ class Printable:
     def sortOrder (self): pass
 
 class ListPrinter:
-    def __init__ (self, columnHeaders, maxLine = None):
+    def __init__ (self, columnHeaders, descendingOrder = False, maxLine = None):
         self.__columnHeaders = columnHeaders
         self.__columnWidths = [len (columnHeader) + 2 for columnHeader in self.__columnHeaders]
         self.__maxLine = maxLine
+        self.__descendingOrder = descendingOrder
 
     def reset (self, printables):
-        self.__printables = sorted (printables, key = lambda printable: printable.sortOrder (), reverse = True)
+        self.__printables = sorted (printables, key = lambda printable: printable.sortOrder (), reverse = self.__descendingOrder)
         if self.__maxLine:
             self.__printables = self.__printables [:self.__maxLine]
         for printable in self.__printables:
@@ -105,7 +106,7 @@ class Query (Operation):
     def sortOrder (self):
         return self.__duration if self.__duration else 0
 
-    listPrinter = ListPrinter (['Server', 'OpId', 'Namespace', 'Sec', 'Query'], maxLine = 30)
+    listPrinter = ListPrinter (['Server', 'OpId', 'Namespace', 'Sec', 'Query'], descendingOrder = True, maxLine = 30)
     def line (self):
         cells = Operation.line (self)
         cells.append (str (self.__namespace))
