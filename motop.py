@@ -15,7 +15,6 @@
 # PERFORMANCE OF THIS SOFTWARE.
 ##
 
-
 """Imports for Python 3 compatibility."""
 from __future__ import print_function
 try:
@@ -28,8 +27,12 @@ import sys
 import os
 import tty
 import termios
+import struct
+import fcntl
 import select
 import json
+import signal
+import pymongo
 from bson import json_util
 from time import sleep
 
@@ -47,41 +50,50 @@ class Value (int):
             return str (int (round (self / 10 ** 3))) + 'K'
         return int.__str__ (self)
 
-class Printable:
-    """Abstract class for ListPrinter."""
-    def line (self): pass
-    def sortOrder (self): pass
-
-class ListPrinter:
+class Block:
     """Class to print blocks of ordered printables."""
 
-    def __init__ (self, columnHeaders, descendingOrder = False, maxLine = None):
+    def __init__ (self, columnHeaders, height, reverseOrder = False):
         self.__columnHeaders = columnHeaders
         self.__columnWidths = [len (columnHeader) + 2 for columnHeader in self.__columnHeaders]
-        self.__maxLine = maxLine
-        self.__descendingOrder = descendingOrder
+        self.__height = height
+        self.__reverseOrder = reverseOrder
+
+    def height (self):
+        return self.__height
 
     def reset (self, printables):
-        self.__printables = sorted (printables, key = lambda printable: printable.sortOrder (), reverse = self.__descendingOrder)
-        if self.__maxLine:
-            self.__printables = self.__printables [:self.__maxLine]
-        for printable in self.__printables:
-            assert isinstance (printable, Printable)
+        self.__printables = sorted (printables, key = lambda printable: printable.sortOrder (), reverse = self.__reverseOrder) [:self.__height]
+        self.__lines = [printable.line () for printable in self.__printables]
 
-    def printLines (self):
+    def printLines (self, leftHeight, width):
+        assert leftHeight > 2
+        leftWidth = width
         for index, columnHeader in enumerate (self.__columnHeaders):
-            print (columnHeader.ljust (self.__columnWidths [index]), end = '')
+            if leftWidth <= len (columnHeader):
+                break
+            print (columnHeader.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
+            leftWidth -= self.__columnWidths [index]
         print ()
-        for printable in self.__printables:
-            for index, cell in enumerate (printable.line ()):
+        leftHeight -= 2
+        for line in self.__lines:
+            if not leftHeight:
+                break
+            leftHeight -= 1
+            leftWidth = width
+            for index, cell in enumerate (line):
+                if leftWidth <= len (self.__columnHeaders [index]):
+                    break
                 assert isinstance (cell, str)
                 if len (cell) + 2 > self.__columnWidths [index]:
-                    self.__columnWidths [index] = len (cell) + 2
-                print (cell.ljust (self.__columnWidths [index]), end = '')
+                    self.__columnWidths [index] = len (cell) + 2 if len (cell) + 2 < leftWidth else leftWidth - 1
+                leftWidth -= self.__columnWidths [index]
+                print (cell.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
             print ()
 
     def findLine (self, line):
         """Returns the printable."""
+
         for printable in self.__printables:
             printableLine = printable.line ()
             different = False
@@ -93,7 +105,7 @@ class ListPrinter:
             if not different:
                 return printable
 
-class Operation (Printable):
+class Operation:
     def __init__ (self, server, opid):
         self.__server = server
         self.__opid = opid
@@ -123,12 +135,13 @@ class Query (Operation):
     def sortOrder (self):
         return self.__duration if self.__duration else 0
 
-    listPrinter = ListPrinter (['Server', 'OpId', 'Namespace', 'Sec', 'Query'], descendingOrder = True, maxLine = 30)
+    block = Block (['Server', 'OpId', 'Namespace', 'Sec', 'Query'], 30, reverseOrder = True)
+
     def line (self):
         cells = Operation.line (self)
         cells.append (str (self.__namespace))
         cells.append (str (self.__duration))
-        cells.append (json.dumps (self.__body, default = json_util.default) [:80])
+        cells.append (json.dumps (self.__body, default = json_util.default) [:200])
         return cells
 
     def printExplain (self):
@@ -156,13 +169,12 @@ class Query (Operation):
             return True
         return False
 
-class Server (Printable):
+class Server:
     def __init__ (self, name, address):
-        from pymongo import Connection
         assert len (name) < 14
         self.__name = name
         self.__address = address
-        self.__connection = Connection (address)
+        self.__connection = pymongo.Connection (address)
         self.__operationCount = 0
         self.__flushCount = 0
 
@@ -179,9 +191,16 @@ class Server (Printable):
         self.__flushCount = flushCount
         return self.__flushCount - oldFlushCount
 
-    listPrinter = ListPrinter (['Server', 'QPS', 'Clients', 'Queue', 'Flushes', 'Connections', 'Memory'])
+    block = Block (['Server', 'QPS', 'Clients', 'Queue', 'Flushes', 'Connections', 'Memory'], 7)
+
     def line (self):
-        serverStatus = self.__connection.admin.command ('serverStatus')
+        success = False
+        while not success:
+            try:
+                serverStatus = self.__connection.admin.command ('serverStatus')
+                success = True
+            except pymongo.errors.AutoReconnect: pass
+
         currentConnection = Value (serverStatus ['connections'] ['current'])
         totalConnection = Value (serverStatus ['connections'] ['available'] + serverStatus ['connections'] ['current'])
         residentMem = Value (serverStatus ['mem'] ['resident'])
@@ -203,7 +222,14 @@ class Server (Printable):
         return cursor.explain ()
 
     def currentOperations (self):
-        for op in self.__connection.admin.current_op () ['inprog']:
+        success = False
+        while not success:
+            try:
+                inprog = self.__connection.admin.current_op () ['inprog']
+                success = True
+            except pymongo.errors.AutoReconnect: pass
+
+        for op in inprog:
             if op ['op'] == 'query':
                 if 'secs_running' in op:
                     yield Query (self, op ['opid'], op ['ns'], op ['query'], op ['secs_running'])
@@ -242,10 +268,16 @@ class ConsoleDeactivator ():
         self.__consoleActivator.__enter__ ()
 
 class Console:
-    """Main class to  use with "with" statement as "wihout" statement for ConsoleActivator."""
+    """Main class for input and output."""
+
     def __init__ (self, consoleActivator):
         self.__consoleDeactivator = ConsoleDeactivator (consoleActivator)
-        self.__listPrinters = (Server.listPrinter, Query.listPrinter)
+        self.__blocks = (Server.block, Query.block)
+        self.saveSize ()
+        signal.signal (signal.SIGWINCH, self.saveSize)
+
+    def saveSize (self, *ignored):
+        self.__height, self.__width = struct.unpack ('hhhh', fcntl.ioctl(0, termios.TIOCGWINSZ , '\000' * 8)) [:2]
 
     def getButton (self):
         button = sys.stdin.read (1)
@@ -257,10 +289,16 @@ class Console:
             return self.getButton ()
 
     def refresh (self):
+        """Prints the blocks with height and width left on the screen."""
         os.system ('clear')
-        for listPrinter in self.__listPrinters:
-            listPrinter.printLines ()
+        leftHeight = self.__height
+        for block in self.__blocks:
+            if leftHeight < 3:
+                break
+            height = block.height () if block.height () < leftHeight else leftHeight
+            block.printLines (height, self.__width)
             print ()
+            leftHeight -= height + 1
 
     def askForOperation (self):
         with self.__consoleDeactivator:
@@ -306,15 +344,16 @@ if __name__ == '__main__':
         with ConsoleActivator () as console:
             while button != 'q':
                 if not button:
-                    Server.listPrinter.reset ([server for server in servers ])
-                    Query.listPrinter.reset ([operation for server in servers for operation in server.currentOperations ()])
+                    printers = []
+                    Server.block.reset ([server for server in servers ])
+                    Query.block.reset ([operation for server in servers for operation in server.currentOperations ()])
                     console.refresh ()
                     sleep (1)
                     button = console.checkButton ()
                 if button in ('e', 'k'):
                     operationInput = console.askForOperation ()
                     if operationInput:
-                        operation = Query.listPrinter.findLine (operationInput)
+                        operation = Query.block.findLine (operationInput)
                         if operation:
                             if button == 'e':
                                 if isinstance (operation, Query):
