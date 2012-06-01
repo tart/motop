@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 ##
 # motop - Unix "top" Clone for MongoDB
 #
@@ -14,12 +15,15 @@
 # PERFORMANCE OF THIS SOFTWARE.
 ##
 
+
+"""Imports for Python 3 compatibility."""
 from __future__ import print_function
 try:
     import __builtin__
     __builtin__.input = __builtin__.raw_input
 except ImportError: pass
 
+"""Common library imports"""
 import sys
 import os
 import tty
@@ -29,12 +33,9 @@ import json
 from bson import json_util
 from time import sleep
 
-try:
-    from ConfigParser import ConfigParser
-except ImportError:
-    from configparser import ConfigParser
-
 class Value (int):
+    """Class extents int to show big numbers human readable."""
+
     def __str__ (self):
         if self > 10 ** 12:
             return str (int (round (self / 10 ** 12))) + 'T'
@@ -47,10 +48,13 @@ class Value (int):
         return int.__str__ (self)
 
 class Printable:
+    """Abstract class for ListPrinter."""
     def line (self): pass
     def sortOrder (self): pass
 
 class ListPrinter:
+    """Class to print blocks of ordered printables."""
+
     def __init__ (self, columnHeaders, descendingOrder = False, maxLine = None):
         self.__columnHeaders = columnHeaders
         self.__columnWidths = [len (columnHeader) + 2 for columnHeader in self.__columnHeaders]
@@ -76,7 +80,8 @@ class ListPrinter:
                 print (cell.ljust (self.__columnWidths [index]), end = '')
             print ()
 
-    def getLine (self, line):
+    def findLine (self, line):
+        """Returns the printable."""
         for printable in self.__printables:
             printableLine = printable.line ()
             different = False
@@ -127,6 +132,7 @@ class Query (Operation):
         return cells
 
     def printExplain (self):
+        """Prints the output of the explain command executed on the server of the query."""
         if self.__namespace:
             server = self.getServer ()
             databaseName, collectionName = self.__namespace.split ('.', 1)
@@ -207,12 +213,15 @@ class Server (Printable):
                 yield Operation (self, op ['opid'])
 
     def killOperation (self, opid):
+        """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
+        pymongo."""
         os.system ('echo "db.killOp (' + str (opid) + ')" | mongo ' + self.__address)
 
     def __str__ (self):
         return self.__name
 
 class ConsoleActivator:
+    """Class to use with "with" statement to hide pressed buttons on the console."""
     def __enter__ (self):
         self.__settings = termios.tcgetattr (sys.stdin)
         tty.setcbreak (sys.stdin.fileno())
@@ -222,6 +231,7 @@ class ConsoleActivator:
         termios.tcsetattr (sys.stdin, termios.TCSADRAIN, self.__settings)
 
 class ConsoleDeactivator ():
+    """Class to use with "with" statement as "wihout" statement for ConsoleActivator."""
     def __init__ (self, consoleActivator):
         self.__consoleActivator = consoleActivator
 
@@ -232,6 +242,7 @@ class ConsoleDeactivator ():
         self.__consoleActivator.__enter__ ()
 
 class Console:
+    """Main class to  use with "with" statement as "wihout" statement for ConsoleActivator."""
     def __init__ (self, consoleActivator):
         self.__consoleDeactivator = ConsoleDeactivator (consoleActivator)
         self.__listPrinters = (Server.listPrinter, Query.listPrinter)
@@ -265,6 +276,12 @@ class Configuration:
         return os.path.splitext (__file__) [0] + ('.default' if default else '') + '.conf'
 
     def servers (self):
+        """Parses the configuration file using the ConfigParser class from default Python library. Two attempts to
+        import the same class for Python 3 compatibility."""
+        try:
+            from ConfigParser import ConfigParser
+        except ImportError:
+            from configparser import ConfigParser
         configParser = ConfigParser ()
         if configParser.read (self.filePath ()):
             servers = []
@@ -273,6 +290,7 @@ class Configuration:
             return servers
 
     def printInstructions (self):
+        """Prints the default configuration file if exists."""
         print ('Please create a configuration file: ' + self.filePath ())
         try:
             with open (self.filePath (default = True)) as defaultConfigurationFile:
@@ -296,7 +314,7 @@ if __name__ == '__main__':
                 if button in ('e', 'k'):
                     operationInput = console.askForOperation ()
                     if operationInput:
-                        operation = Query.listPrinter.getLine (operationInput)
+                        operation = Query.listPrinter.findLine (operationInput)
                         if operation:
                             if button == 'e':
                                 if isinstance (operation, Query):
