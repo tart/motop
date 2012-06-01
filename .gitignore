@@ -26,3 +26,6 @@ pip-log.txt
 #Editors
 .project
 .pydevproject
+
+#Configuration
+motop.conf

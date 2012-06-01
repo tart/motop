@@ -22,6 +22,11 @@ import json
 from bson import json_util
 from time import sleep
 
+try:
+    from ConfigParser import ConfigParser
+except ImportError:
+    from configparser import ConfigParser
+
 class Value (int):
     def __str__ (self):
         if self > 10 ** 12:
@@ -248,36 +253,55 @@ class Console:
                 if opid:
                     return serverName, opid
 
-servers = {Server ('MongoDBMaster', '10.42.2.207'),
-           Server ('MongoDB01' , '10.42.2.121'),
-           Server ('MongoDB02', '10.42.2.122'),
-           Server ('MongoDB03', '10.42.2.123'),
-           Server ('DBAlpha', '10.42.2.206')}
+class Configuration:
+    def filePath (self, default = False):
+        return os.path.splitext (__file__) [0] + ('.default' if default else '') + '.conf'
+
+    def servers (self):
+        configParser = ConfigParser ()
+        if configParser.read (self.filePath ()):
+            servers = []
+            for section in configParser.sections ():
+                servers.append (Server (section, configParser.get (section, 'address')))
+            return servers
+
+    def printInstructions (self):
+        print ('Please create a configuration file: ' + self.filePath ())
+        try:
+            with open (self.filePath (default = True)) as defaultConfigurationFile:
+                print ('Like this:')
+                print (defaultConfigurationFile.read ())
+        except IOError: pass
 
 if __name__ == '__main__':
-    button = None
-    with ConsoleActivator () as console:
-        while button != 'q':
-            if not button:
-                Server.listPrinter.reset ([server for server in servers ])
-                Query.listPrinter.reset ([operation for server in servers for operation in server.currentOperations ()])
-                console.refresh ()
-                sleep (1)
-                button = console.checkButton ()
-            if button in ('e', 'k'):
-                operationInput = console.askForOperation ()
-                if operationInput:
-                    operation = Query.listPrinter.getLine (operationInput)
-                    if operation:
-                        if button == 'e':
-                            if isinstance (operation, Query):
-                                operation.printExplain ()
-                            else:
-                                print ('Only queries with namespace can be explained.')
-                        elif button == 'k':
-                            operation.kill ()
+    configuration = Configuration ()
+    servers = configuration.servers ()
+    if servers:
+        button = None
+        with ConsoleActivator () as console:
+            while button != 'q':
+                if not button:
+                    Server.listPrinter.reset ([server for server in servers ])
+                    Query.listPrinter.reset ([operation for server in servers for operation in server.currentOperations ()])
+                    console.refresh ()
+                    sleep (1)
+                    button = console.checkButton ()
+                if button in ('e', 'k'):
+                    operationInput = console.askForOperation ()
+                    if operationInput:
+                        operation = Query.listPrinter.getLine (operationInput)
+                        if operation:
+                            if button == 'e':
+                                if isinstance (operation, Query):
+                                    operation.printExplain ()
+                                else:
+                                    print ('Only queries with namespace can be explained.')
+                            elif button == 'k':
+                                operation.kill ()
+                        else:
+                            print ('Invalid operation.')
+                        button = console.getButton ()
                     else:
-                        print ('Invalid operation.')
-                    button = console.getButton ()
-                else:
-                    button = None
+                        button = None
+    else:
+        configuration.printInstructions ()
