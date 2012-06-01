@@ -23,3 +23,10 @@ h4. Configuration
 Configuration file can be created by copying motop.default.conf to motop.conf. Section are used for servers.
 
 address The address of the server
+
+h4. License
+
+This tool is released under the ISC License, whose text is included to the source file. The ISC License is registered
+with and approved by the Open Source Initiative [1].
+
+[1] http://opensource.org/licenses/isc-license.txt
