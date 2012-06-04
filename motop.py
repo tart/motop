@@ -38,7 +38,6 @@ from time import sleep
 
 class Value (int):
     """Class extents int to show big numbers human readable."""
-
     def __str__ (self):
         if self > 10 ** 12:
             return str (int (round (self / 10 ** 12))) + 'T'
@@ -52,108 +51,93 @@ class Value (int):
 
 class Block:
     """Class to print blocks of ordered printables."""
-
-    def __init__ (self, columnHeaders, height, reverseOrder = False):
+    def __init__ (self, columnHeaders):
         self.__columnHeaders = columnHeaders
-        self.__columnWidths = [len (columnHeader) + 2 for columnHeader in self.__columnHeaders]
-        self.__height = height
-        self.__reverseOrder = reverseOrder
-
-    def height (self):
-        return self.__height
+        self.__columnWidths = [6 for columnHeader in self.__columnHeaders]
 
     def reset (self, printables):
-        self.__printables = sorted (printables, key = lambda printable: printable.sortOrder (), reverse = self.__reverseOrder) [:self.__height]
-        self.__lines = [printable.line () for printable in self.__printables]
+        self.__lines = []
+        self.__lineClass = None
+        for printable in printables:
+            if not self.__lineClass:
+                assert hasattr (printable, 'line')
+                self.__lineClass = printable.__class__
+            else:
+                assert isinstance (printable, self.__lineClass)
+            self.__lines.append (printable.line ())
 
-    def printLines (self, leftHeight, width):
-        assert leftHeight > 2
-        leftWidth = width
-        for index, columnHeader in enumerate (self.__columnHeaders):
-            if leftWidth <= len (columnHeader):
+    def __len__ (self):
+        """Return line count plus one for header, one for blank line at buttom."""
+        return len (self.__lines) + 2
+
+    def __printLine (self, line, width):
+        """Prints the line, cuts the part after the width, sets self.__columnWidths to the longest cell."""
+        for index, cell in enumerate (line):
+            if width <= len (self.__columnHeaders [index]):
                 break
-            print (columnHeader.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
-            leftWidth -= self.__columnWidths [index]
+            cell = str (cell)
+            if len (cell) + 2 > self.__columnWidths [index]:
+                self.__columnWidths [index] = len (cell) + 2 if len (cell) + 2 < width else width - 1
+            print (cell.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
+            width -= self.__columnWidths [index]
         print ()
-        leftHeight -= 2
+
+    def printLines (self, height, width):
+        """Prints the lines set with reset, cuts the ones after the height."""
+        assert height > 2
+        self.__printLine (self.__columnHeaders, width)
+        height -= 1
         for line in self.__lines:
-            if not leftHeight:
+            if not height:
                 break
-            leftHeight -= 1
-            leftWidth = width
-            for index, cell in enumerate (line):
-                if leftWidth <= len (self.__columnHeaders [index]):
-                    break
-                assert isinstance (cell, str)
-                if len (cell) + 2 > self.__columnWidths [index]:
-                    self.__columnWidths [index] = len (cell) + 2 if len (cell) + 2 < leftWidth else leftWidth - 1
-                leftWidth -= self.__columnWidths [index]
-                print (cell.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
-            print ()
+            assert len (line) <= len (self.__columnHeaders)
+            height -= 1
+            self.__printLine (line, width)
 
-    def findLine (self, line):
-        """Returns the printable."""
-
-        for printable in self.__printables:
-            printableLine = printable.line ()
+    def findLine (self, cells):
+        """Returns the printable from self.__lineClass saved with reset."""
+        for line in self.__lines:
             different = False
             index = 0
-            while not different and len (line) > index:
-                if printableLine [index] != line [index]:
+            while not different and len (cells) > index:
+                if str (line [index]) != cells [index]:
                     different = True
                 index += 1
             if not different:
-                return printable
+                return self.__lineClass (*line)
 
 class Operation:
-    def __init__ (self, server, opid):
+    def __init__ (self, server, opid, namespace = None, duration = None, query = None):
         self.__server = server
         self.__opid = opid
-
-    def getServer (self):
-        return self.__server
+        self.__namespace = namespace
+        self.__duration = duration
+        self.__query = json.loads (query, object_hook = json_util.object_hook) if isinstance (query, str) else query
 
     def sortOrder (self):
-        return -1 * self.__opid
+        return self.__duration if self.__duration is not None else -1
 
     def line (self):
         cells = []
-        cells.append (str (self.__server))
-        cells.append (str (self.__opid))
+        cells.append (self.__server)
+        cells.append (self.__opid)
+        cells.append (self.__namespace) if self.__namespace is not None else None
+        cells.append (self.__duration) if self.__duration is not None else None
+        cells.append (json.dumps (self.__query, default = json_util.default)) if self.__query is not None else None
         return cells
 
     def kill (self):
         return self.__server.killOperation (self.__opid)
 
-class Query (Operation):
-    def __init__ (self, server, opid, namespace, body, duration = None):
-        Operation.__init__ (self, server, opid)
-        self.__namespace = namespace
-        self.__body = body
-        self.__duration = duration
-
-    def sortOrder (self):
-        return self.__duration if self.__duration else 0
-
-    block = Block (['Server', 'OpId', 'Namespace', 'Sec', 'Query'], 30, reverseOrder = True)
-
-    def line (self):
-        cells = Operation.line (self)
-        cells.append (str (self.__namespace))
-        cells.append (str (self.__duration))
-        cells.append (json.dumps (self.__body, default = json_util.default) [:200])
-        return cells
-
     def printExplain (self):
         """Prints the output of the explain command executed on the server of the query."""
-        if self.__namespace:
-            server = self.getServer ()
+        if self.__namespace and self.__query:
             databaseName, collectionName = self.__namespace.split ('.', 1)
-            explainOutput = server.explainQuery (databaseName, collectionName, self.__body)
+            explainOutput = self.__server.explainQuery (databaseName, collectionName, self.__query)
             print ('Cursor:', explainOutput ['cursor'])
-            print ('Indexes:', end = '')
+            print ('Indexes:', end = ' ')
             for index in explainOutput ['indexBounds']:
-                print (index, end = '')
+                print (index, end = ' ')
             print ()
             print ('IndexOnly:', explainOutput ['indexOnly'])
             print ('MultiKey:', explainOutput ['isMultiKey'])
@@ -165,21 +149,17 @@ class Query (Operation):
             print ('ScannedObjects:', explainOutput ['nscannedObjects'])
             if 'scanAndOrder' in explainOutput:
                 print ('ScanAndOrder:', explainOutput ['scanAndOrder'])
-            print ('Query:', json.dumps (self.__body, default = json_util.default, sort_keys = True, indent = 4))
-            return True
-        return False
+            print ('Query:', json.dumps (self.__query, default = json_util.default, sort_keys = True, indent = 4))
+        else:
+            print ('Only queries with namespace can be explained.')
 
 class Server:
     def __init__ (self, name, address):
-        assert len (name) < 14
         self.__name = name
         self.__address = address
         self.__connection = pymongo.Connection (address)
         self.__operationCount = 0
         self.__flushCount = 0
-
-    def sortOrder (self):
-        return self.__name
 
     def __getOperationCountChange (self, operationCounts):
         oldOperationCount = self.__operationCount
@@ -190,8 +170,6 @@ class Server:
         oldFlushCount = self.__flushCount
         self.__flushCount = flushCount
         return self.__flushCount - oldFlushCount
-
-    block = Block (['Server', 'QPS', 'Clients', 'Queue', 'Flushes', 'Connections', 'Memory'], 7)
 
     def line (self):
         success = False
@@ -231,10 +209,8 @@ class Server:
 
         for op in inprog:
             if op ['op'] == 'query':
-                if 'secs_running' in op:
-                    yield Query (self, op ['opid'], op ['ns'], op ['query'], op ['secs_running'])
-                else:
-                    yield Query (self, op ['opid'], op ['ns'], op ['query'])
+                duration = op ['secs_running'] if 'secs_running' in op else 0
+                yield Operation (self, op ['opid'], op ['ns'], duration, op ['query'])
             else:
                 yield Operation (self, op ['opid'])
 
@@ -249,12 +225,16 @@ class Server:
 class ConsoleActivator:
     """Class to use with "with" statement to hide pressed buttons on the console."""
     def __enter__ (self):
-        self.__settings = termios.tcgetattr (sys.stdin)
-        tty.setcbreak (sys.stdin.fileno())
+        try:
+            self.__settings = termios.tcgetattr (sys.stdin)
+            tty.setcbreak (sys.stdin.fileno())
+        except termios.error:
+            self.__settings = None
         return Console (self)
 
     def __exit__ (self, *ignored):
-        termios.tcsetattr (sys.stdin, termios.TCSADRAIN, self.__settings)
+        if self.__settings:
+            termios.tcsetattr (sys.stdin, termios.TCSADRAIN, self.__settings)
 
 class ConsoleDeactivator ():
     """Class to use with "with" statement as "wihout" statement for ConsoleActivator."""
@@ -269,15 +249,16 @@ class ConsoleDeactivator ():
 
 class Console:
     """Main class for input and output."""
-
     def __init__ (self, consoleActivator):
         self.__consoleDeactivator = ConsoleDeactivator (consoleActivator)
-        self.__blocks = (Server.block, Query.block)
         self.saveSize ()
         signal.signal (signal.SIGWINCH, self.saveSize)
 
     def saveSize (self, *ignored):
-        self.__height, self.__width = struct.unpack ('hhhh', fcntl.ioctl(0, termios.TIOCGWINSZ , '\000' * 8)) [:2]
+        try:
+            self.__height, self.__width = struct.unpack ('hhhh', fcntl.ioctl(0, termios.TIOCGWINSZ , '\000' * 8)) [:2]
+        except IOError:
+            self.__height, self.__width = 20, 80
 
     def getButton (self):
         button = sys.stdin.read (1)
@@ -288,14 +269,15 @@ class Console:
         if select.select ([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
             return self.getButton ()
 
-    def refresh (self):
+    def refresh (self, blocks):
         """Prints the blocks with height and width left on the screen."""
         os.system ('clear')
         leftHeight = self.__height
-        for block in self.__blocks:
+        for block in blocks:
             if leftHeight < 3:
                 break
-            height = block.height () if block.height () < leftHeight else leftHeight
+            height = len (block) if len (block) < leftHeight else leftHeight
+            assert hasattr (block, 'printLines')
             block.printLines (height, self.__width)
             print ()
             leftHeight -= height + 1
@@ -336,36 +318,44 @@ class Configuration:
                 print (defaultConfigurationFile.read ())
         except IOError: pass
 
+class QueryScreen:
+    def __init__ (self, console, servers):
+        self.__console = console
+        self.__servers = servers
+        self.__serverBlock = Block (('Server', 'QPS', 'Clients', 'Queue', 'Flushes', 'Connections', 'Memory'))
+        self.__queryBlock = Block (('Server', 'OpId', 'Namespace', 'Sec', 'Query'))
+
+    def refresh (self):
+        self.__serverBlock.reset ([server for server in self.__servers ])
+        operations = [operation for server in self.__servers for operation in server.currentOperations ()]
+        self.__queryBlock.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
+        self.__console.refresh ((self.__serverBlock, self.__queryBlock))
+
+    def action (self, button):
+        while button in ('e', 'k'):
+            operationInput = self.__console.askForOperation ()
+            if operationInput:
+                operation = self.__queryBlock.findLine (operationInput)
+                if operation:
+                    if button == 'e':
+                        operation.printExplain ()
+                    elif button == 'k':
+                        operation.kill ()
+                    button = self.__console.getButton ()
+            else:
+                button = None
+
 if __name__ == '__main__':
     configuration = Configuration ()
     servers = configuration.servers ()
     if servers:
         button = None
         with ConsoleActivator () as console:
+            queryScreen = QueryScreen (console, servers)
             while button != 'q':
-                if not button:
-                    printers = []
-                    Server.block.reset ([server for server in servers ])
-                    Query.block.reset ([operation for server in servers for operation in server.currentOperations ()])
-                    console.refresh ()
-                    sleep (1)
-                    button = console.checkButton ()
-                if button in ('e', 'k'):
-                    operationInput = console.askForOperation ()
-                    if operationInput:
-                        operation = Query.block.findLine (operationInput)
-                        if operation:
-                            if button == 'e':
-                                if isinstance (operation, Query):
-                                    operation.printExplain ()
-                                else:
-                                    print ('Only queries with namespace can be explained.')
-                            elif button == 'k':
-                                operation.kill ()
-                        else:
-                            print ('Invalid operation.')
-                        button = console.getButton ()
-                    else:
-                        button = None
+                queryScreen.refresh ()
+                sleep (1)
+                button = console.checkButton ()
+                queryScreen.action (button)
     else:
         configuration.printInstructions ()
