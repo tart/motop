@@ -70,22 +70,26 @@ class Block:
         """Return line count plus one for header, one for blank line at buttom."""
         return len (self.__lines) + 2
 
-    def __printLine (self, line, width):
+    def __printLine (self, line, width, bold = False):
         """Prints the line, cuts the part after the width, sets self.__columnWidths to the longest cell."""
         for index, cell in enumerate (line):
-            if width <= len (self.__columnHeaders [index]):
+            if width - 2 < len (self.__columnHeaders [index]):
                 break
             cell = str (cell)
             if len (cell) + 2 > self.__columnWidths [index]:
-                self.__columnWidths [index] = len (cell) + 2 if len (cell) + 2 < width else width - 1
+                self.__columnWidths [index] = len (cell) + 2 if len (cell) + 2 < width else width - 3
+            if bold and sys.stdout.isatty ():
+                print ('\x1b[1m', end = '')
             print (cell.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
+            if bold and sys.stdout.isatty ():
+                print ('\x1b[0m', end = '')
             width -= self.__columnWidths [index]
         print ()
 
     def printLines (self, height, width):
         """Prints the lines set with reset, cuts the ones after the height."""
         assert height > 2
-        self.__printLine (self.__columnHeaders, width)
+        self.__printLine (self.__columnHeaders, width, True)
         height -= 1
         for line in self.__lines:
             if not height:
