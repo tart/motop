@@ -185,8 +185,8 @@ class Server:
 
         currentConnection = Value (serverStatus ['connections'] ['current'])
         totalConnection = Value (serverStatus ['connections'] ['available'] + serverStatus ['connections'] ['current'])
-        residentMem = Value (serverStatus ['mem'] ['resident'])
-        mappedMem = Value (serverStatus ['mem'] ['mapped'])
+        residentMem = Value (serverStatus ['mem'] ['resident'] * (10 ** 6))
+        mappedMem = Value (serverStatus ['mem'] ['mapped'] * (10 ** 6))
         cells = []
         cells.append (str (self))
         cells.append (str (Value (self.__getOperationCountChange (serverStatus ['opcounters']))))
