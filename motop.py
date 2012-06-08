@@ -175,14 +175,14 @@ class Server:
         self.__flushCount = flushCount
         return self.__flushCount - oldFlushCount
 
-    def line (self):
-        success = False
-        while not success:
+    def __execute (self, procedure, *arguments):
+        for tryCount in range (100):
             try:
-                serverStatus = self.__connection.admin.command ('serverStatus')
-                success = True
+                return procedure (*arguments)
             except pymongo.errors.AutoReconnect: pass
 
+    def line (self):
+        serverStatus = self.__execute (self.__connection.admin.command, 'serverStatus')
         currentConnection = Value (serverStatus ['connections'] ['current'])
         totalConnection = Value (serverStatus ['connections'] ['available'] + serverStatus ['connections'] ['current'])
         residentMem = Value (serverStatus ['mem'] ['resident'] * (10 ** 6))
@@ -204,14 +204,7 @@ class Server:
         return cursor.explain ()
 
     def currentOperations (self):
-        success = False
-        while not success:
-            try:
-                inprog = self.__connection.admin.current_op () ['inprog']
-                success = True
-            except pymongo.errors.AutoReconnect: pass
-
-        for op in inprog:
+        for op in self.__execute (self.__connection.admin.current_op) ['inprog']:
             if op ['op'] == 'query':
                 duration = op ['secs_running'] if 'secs_running' in op else 0
                 yield Operation (self, op ['opid'], op ['ns'], duration, op ['query'])
@@ -255,23 +248,25 @@ class Console:
     """Main class for input and output."""
     def __init__ (self, consoleActivator):
         self.__consoleDeactivator = ConsoleDeactivator (consoleActivator)
-        self.saveSize ()
-        signal.signal (signal.SIGWINCH, self.saveSize)
+        self.__saveSize ()
+        signal.signal (signal.SIGWINCH, self.__saveSize)
 
-    def saveSize (self, *ignored):
+    def __saveSize (self, *ignored):
         try:
             self.__height, self.__width = struct.unpack ('hhhh', fcntl.ioctl(0, termios.TIOCGWINSZ , '\000' * 8)) [:2]
         except IOError:
             self.__height, self.__width = 20, 80
 
-    def getButton (self):
-        button = sys.stdin.read (1)
-        if button in ('e', 'k', 'q'):
-            return button
-
-    def checkButton (self):
-        if select.select ([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
-            return self.getButton ()
+    def checkButton (self, waitTime = None):
+        """Checks one character input. Waits for approximately waitTime parameter as seconds. Waits for input if no
+        parameter given."""
+        if waitTime:
+            for timer in range (waitTime * 10):
+                sleep (0.1)
+                if select.select ([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
+                    return sys.stdin.read (1)
+        else:
+            return sys.stdin.read (1)
 
     def refresh (self, blocks):
         """Prints the blocks with height and width left on the screen."""
@@ -347,7 +342,7 @@ class QueryScreen:
                         operation.printExplain ()
                     elif button == 'k':
                         operation.kill ()
-                    button = self.__console.getButton ()
+                    button = self.__console.checkButton ()
             else:
                 button = None
 
@@ -360,8 +355,7 @@ if __name__ == '__main__':
             queryScreen = QueryScreen (console, servers)
             while button != 'q':
                 queryScreen.refresh ()
-                sleep (1)
-                button = console.checkButton ()
+                button = console.checkButton (1)
                 queryScreen.action (button)
     else:
         configuration.printInstructions ()
