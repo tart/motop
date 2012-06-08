@@ -347,15 +347,17 @@ class QueryScreen:
                 button = None
 
 if __name__ == '__main__':
-    configuration = Configuration ()
-    servers = configuration.servers ()
-    if servers:
-        button = None
-        with ConsoleActivator () as console:
-            queryScreen = QueryScreen (console, servers)
-            while button != 'q':
-                queryScreen.refresh ()
-                button = console.checkButton (1)
-                queryScreen.action (button)
-    else:
-        configuration.printInstructions ()
+    try:
+        configuration = Configuration ()
+        servers = configuration.servers ()
+        if servers:
+            button = None
+            with ConsoleActivator () as console:
+                queryScreen = QueryScreen (console, servers)
+                while button != 'q':
+                    queryScreen.refresh ()
+                    button = console.checkButton (1)
+                    queryScreen.action (button)
+        else:
+            configuration.printInstructions ()
+    except KeyboardInterrupt: pass
