@@ -73,11 +73,11 @@ class Block:
     def __printLine (self, line, width, bold = False):
         """Prints the line, cuts the part after the width, sets self.__columnWidths to the longest cell."""
         for index, cell in enumerate (line):
-            if width - 2 < len (self.__columnHeaders [index]):
+            if width <= len (self.__columnHeaders [index]):
                 break
             cell = str (cell)
-            if len (cell) + 2 > self.__columnWidths [index]:
-                self.__columnWidths [index] = len (cell) + 2 if len (cell) + 2 < width else width - 3
+            if len (cell) + 2 >= self.__columnWidths [index]:
+                self.__columnWidths [index] = len (cell) + 2 if len (cell) + 2 < width else width
             if bold and sys.stdout.isatty ():
                 print ('\x1b[1m', end = '')
             print (cell.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
@@ -92,9 +92,9 @@ class Block:
         self.__printLine (self.__columnHeaders, width, True)
         height -= 1
         for line in self.__lines:
-            if not height:
+            if height <= 1:
                 break
-            assert len (line) <= len (self.__columnHeaders)
+            assert len (self.__columnHeaders) >= len (line)
             height -= 1
             self.__printLine (line, width)
 
@@ -278,13 +278,15 @@ class Console:
         os.system ('clear')
         leftHeight = self.__height
         for block in blocks:
-            if leftHeight < 3:
+            """Do not show the block if there are not left lines for header and a row"""
+            if leftHeight <= 2:
                 break
             height = len (block) if len (block) < leftHeight else leftHeight
             assert hasattr (block, 'printLines')
             block.printLines (height, self.__width)
-            print ()
-            leftHeight -= height + 1
+            leftHeight -= height
+            if leftHeight >= 2:
+                print ()
 
     def askForOperation (self):
         with self.__consoleDeactivator:
