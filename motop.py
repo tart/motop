@@ -338,7 +338,6 @@ class QueryScreen:
                 operations = self.__queryBlock.findLines (condition)
                 if len (operations) == 1:
                     operation = operations [0]
-                    print (button)
                     if button == 'e':
                         operation.printExplain ()
                     elif button == 'k':
