@@ -11,6 +11,8 @@ e	Explain the query
 
 k   Kill operation using "mongo" executable
 
+K   Kill operations older than given seconds using "mongo" executable
+
 ## Dependencies
 
 * python 2.6 or greater

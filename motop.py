@@ -98,17 +98,9 @@ class Block:
             height -= 1
             self.__printLine (line, width)
 
-    def findLine (self, cells):
-        """Returns the printable from self.__lineClass saved with reset."""
-        for line in self.__lines:
-            different = False
-            index = 0
-            while not different and len (cells) > index:
-                if str (line [index]) != cells [index]:
-                    different = True
-                index += 1
-            if not different:
-                return self.__lineClass (*line)
+    def findLines (self, condition):
+        """Returns the printables from self.__lineClass saved with reset."""
+        return [self.__lineClass (*line) for line in self.__lines if condition (line)]
 
 class Operation:
     def __init__ (self, server, opid, namespace = None, duration = None, query = None):
@@ -284,14 +276,17 @@ class Console:
                 print ()
                 leftHeight -= 1
 
-    def askForOperation (self):
+    def askForInput (self, *attributes):
+        """Asks for input for given attributes in given order."""
         with self.__consoleDeactivator:
             print ()
-            serverName = input ('Server: ')
-            if serverName:
-                opid = input ('OpId: ')
-                if opid:
-                    return serverName, opid
+            values = []
+            for attribute in attributes:
+                value = input (attribute + ': ')
+                if not value:
+                    break
+                values.append (value)
+        return values
 
 class Configuration:
     def filePath (self, default = False):
@@ -334,11 +329,15 @@ class QueryScreen:
         self.__console.refresh ((self.__serverBlock, self.__queryBlock))
 
     def action (self, button):
+        """Performs actions for the pressed button."""
         while button in ('e', 'k'):
-            operationInput = self.__console.askForOperation ()
-            if operationInput:
-                operation = self.__queryBlock.findLine (operationInput)
-                if operation:
+            """Kills or explains single operation."""
+            operationInput = self.__console.askForInput ('Server', 'OpId')
+            if len (operationInput) == 2:
+                def condition (line): str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
+                operations = self.__queryBlock.findLines (condition)
+                if len (operations) == 1:
+                    operation = operations [0]
                     if button == 'e':
                         operation.printExplain ()
                     elif button == 'k':
@@ -346,6 +345,14 @@ class QueryScreen:
                     button = self.__console.checkButton ()
             else:
                 button = None
+        if button == 'K':
+            """Batch kills operations."""
+            durationInput = self.__console.askForInput ('Sec')
+            if len (durationInput) == 1:
+                def condition (line): len (line) >= 3 and line [3] > int (durationInput [0])
+                operations = self.__queryBlock.findLines (condition)
+                for operation in operations:
+                    operation.kill ()
 
 if __name__ == '__main__':
     try:
