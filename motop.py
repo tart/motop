@@ -94,7 +94,7 @@ class Block:
         for line in self.__lines:
             if height <= 1:
                 break
-            assert len (self.__columnHeaders) >= len (line)
+            assert len (line) <= len (self.__columnHeaders)
             height -= 1
             self.__printLine (line, width)
 
@@ -282,6 +282,7 @@ class Console:
             leftHeight -= height
             if leftHeight >= 2:
                 print ()
+                leftHeight -= 1
 
     def askForOperation (self):
         with self.__consoleDeactivator:
