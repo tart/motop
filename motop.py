@@ -71,7 +71,7 @@ class Block:
         return len (self.__lines) + 2
 
     def __printLine (self, line, width, bold = False):
-        """Prints the line, cuts the part after the width, sets self.__columnWidths to the longest cell."""
+        """Print the line, cuts the part after the width, sets self.__columnWidths to the longest cell."""
         for index, cell in enumerate (line):
             if width <= len (self.__columnHeaders [index]):
                 break
@@ -87,7 +87,7 @@ class Block:
         print ()
 
     def printLines (self, height, width):
-        """Prints the lines set with reset, cuts the ones after the height."""
+        """Print the lines set with reset, cuts the ones after the height."""
         assert height > 2
         self.__printLine (self.__columnHeaders, width, True)
         height -= 1
@@ -99,7 +99,7 @@ class Block:
             self.__printLine (line, width)
 
     def findLines (self, condition):
-        """Returns the printables from self.__lineClass saved with reset."""
+        """Return the printables from self.__lineClass saved with reset."""
         return [self.__lineClass (*line) for line in self.__lines if condition (line)]
 
 class Operation:
@@ -126,8 +126,9 @@ class Operation:
         return self.__server.killOperation (self.__opid)
 
     def printExplain (self):
-        """Prints the output of the explain command executed on the server of the query."""
+        """Print the query and the output of the explain command executed on the server."""
         if self.__namespace and self.__query:
+            print ('Query:', json.dumps (self.__query, default = json_util.default, indent = 4))
             databaseName, collectionName = self.__namespace.split ('.', 1)
             explainOutput = self.__server.explainQuery (databaseName, collectionName, self.__query)
             print ('Cursor:', explainOutput ['cursor'])
@@ -145,7 +146,6 @@ class Operation:
             print ('ScannedObjects:', explainOutput ['nscannedObjects'])
             if 'scanAndOrder' in explainOutput:
                 print ('ScanAndOrder:', explainOutput ['scanAndOrder'])
-            print ('Query:', json.dumps (self.__query, default = json_util.default, sort_keys = True, indent = 4))
         else:
             print ('Only queries with namespace can be explained.')
 
@@ -168,7 +168,8 @@ class Server:
         return self.__flushCount - oldFlushCount
 
     def __execute (self, procedure, *arguments):
-        for tryCount in range (100):
+        """Try 10 times to execute the procedure."""
+        for tryCount in range (10):
             try:
                 return procedure (*arguments)
             except pymongo.errors.AutoReconnect: pass
@@ -192,8 +193,8 @@ class Server:
     def explainQuery (self, databaseName, collectionName, query):
         database = getattr (self.__connection, databaseName)
         collection = getattr (database, collectionName)
-        cursor = collection.find (query)
-        return cursor.explain ()
+        cursor = self.__execute (collection.find, query)
+        return self.__execute (cursor.explain)
 
     def currentOperations (self):
         for op in self.__execute (self.__connection.admin.current_op) ['inprog']:
@@ -250,7 +251,7 @@ class Console:
             self.__height, self.__width = 20, 80
 
     def checkButton (self, waitTime = None):
-        """Checks one character input. Waits for approximately waitTime parameter as seconds. Waits for input if no
+        """Check one character input. Waits for approximately waitTime parameter as seconds. Waits for input if no
         parameter given."""
         if waitTime:
             for timer in range (waitTime * 10):
@@ -261,7 +262,7 @@ class Console:
             return sys.stdin.read (1)
 
     def refresh (self, blocks):
-        """Prints the blocks with height and width left on the screen."""
+        """Print the blocks with height and width left on the screen."""
         os.system ('clear')
         leftHeight = self.__height
         for block in blocks:
@@ -277,7 +278,7 @@ class Console:
                 leftHeight -= 1
 
     def askForInput (self, *attributes):
-        """Asks for input for given attributes in given order."""
+        """Ask for input for given attributes in given order."""
         with self.__consoleDeactivator:
             print ()
             values = []
@@ -293,7 +294,7 @@ class Configuration:
         return os.path.splitext (__file__) [0] + ('.default' if default else '') + '.conf'
 
     def servers (self):
-        """Parses the configuration file using the ConfigParser class from default Python library. Two attempts to
+        """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
         import the same class for Python 3 compatibility."""
         try:
             from ConfigParser import ConfigParser
@@ -307,7 +308,7 @@ class Configuration:
             return servers
 
     def printInstructions (self):
-        """Prints the default configuration file if exists."""
+        """Print the default configuration file if exists."""
         print ('Please create a configuration file: ' + self.filePath ())
         try:
             with open (self.filePath (default = True)) as defaultConfigurationFile:
@@ -329,9 +330,9 @@ class QueryScreen:
         self.__console.refresh ((self.__serverBlock, self.__queryBlock))
 
     def action (self, button):
-        """Performs actions for the pressed button."""
+        """Perform actions for the pressed button."""
         while button in ('e', 'k'):
-            """Kills or explains single operation."""
+            """Kill or explain single operation."""
             operationInput = self.__console.askForInput ('Server', 'OpId')
             if len (operationInput) == 2:
                 condition = lambda (line): str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
@@ -346,7 +347,7 @@ class QueryScreen:
             else:
                 button = None
         if button == 'K':
-            """Batch kills operations."""
+            """Batch kill operations."""
             durationInput = self.__console.askForInput ('Sec')
             if len (durationInput) == 1:
                 condition = lambda (line): len (line) >= 3 and line [3] > int (durationInput [0])
@@ -355,6 +356,7 @@ class QueryScreen:
                     operation.kill ()
 
 if __name__ == '__main__':
+    """Run the main program."""
     try:
         configuration = Configuration ()
         servers = configuration.servers ()
@@ -365,7 +367,9 @@ if __name__ == '__main__':
                 while button != 'q':
                     queryScreen.refresh ()
                     button = console.checkButton (1)
-                    queryScreen.action (button)
+                    try:
+                        queryScreen.action (button)
+                    except KeyboardInterrupt: pass
         else:
             configuration.printInstructions ()
     except KeyboardInterrupt: pass
