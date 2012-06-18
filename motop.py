@@ -71,13 +71,12 @@ class Block:
         return len (self.__lines) + 2
 
     def __printLine (self, line, width, bold = False):
-        """Print the line, cuts the part after the width, sets self.__columnWidths to the longest cell."""
+        """Print the cells separated by 2 spaces, cut the part after the width."""
         for index, cell in enumerate (line):
-            if width <= len (self.__columnHeaders [index]):
+            if width < len (self.__columnHeaders [index]):
                 break
             cell = str (cell)
-            if len (cell) + 2 >= self.__columnWidths [index]:
-                self.__columnWidths [index] = len (cell) + 2 if len (cell) + 2 < width else width
+            self.__columnWidths [index] = min (width, max (len (cell) + 2, self.__columnWidths [index]))
             if bold and sys.stdout.isatty ():
                 print ('\x1b[1m', end = '')
             print (cell.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
