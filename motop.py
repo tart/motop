@@ -334,7 +334,7 @@ class QueryScreen:
             """Kill or explain single operation."""
             operationInput = self.__console.askForInput ('Server', 'OpId')
             if len (operationInput) == 2:
-                condition = lambda (line): str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
+                condition = lambda line: str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
                 operations = self.__queryBlock.findLines (condition)
                 if len (operations) == 1:
                     operation = operations [0]
@@ -349,7 +349,7 @@ class QueryScreen:
             """Batch kill operations."""
             durationInput = self.__console.askForInput ('Sec')
             if len (durationInput) == 1:
-                condition = lambda (line): len (line) >= 3 and line [3] > int (durationInput [0])
+                condition = lambda line: len (line) >= 3 and line [3] > int (durationInput [0])
                 operations = self.__queryBlock.findLines (condition)
                 for operation in operations:
                     operation.kill ()
