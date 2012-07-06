@@ -87,7 +87,7 @@ class Block:
 
     def printLines (self, height, width):
         """Print the lines set with reset, cuts the ones after the height."""
-        assert height > 2
+        assert height > 1
         self.__printLine (self.__columnHeaders, width, True)
         height -= 1
         for line in self.__lines:
