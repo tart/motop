@@ -35,6 +35,7 @@ import signal
 import pymongo
 from bson import json_util
 from time import sleep
+from datetime import datetime
 
 class Value (int):
     """Class extents int to show big numbers human readable."""
@@ -154,12 +155,16 @@ class Server:
         self.__address = address
         self.__connection = pymongo.Connection (address)
         self.__operationCount = 0
+        self.__operationCheckTime = datetime.now ()
         self.__flushCount = 0
 
     def __getOperationCountChange (self, operationCounts):
         oldOperationCount = self.__operationCount
+        oldOperationCheckTime = self.__operationCheckTime
         self.__operationCount = sum ([value for key, value in operationCounts.items ()])
-        return self.__operationCount - oldOperationCount
+        self.__operationCheckTime = datetime.now ()
+        timespan = self.__operationCheckTime - oldOperationCheckTime
+        return (self.__operationCount - oldOperationCount) / timespan.total_seconds ()
 
     def __getFlushCountChange (self, flushCount):
         oldFlushCount = self.__flushCount
