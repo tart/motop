@@ -164,7 +164,7 @@ class Server:
         self.__operationCount = sum ([value for key, value in operationCounts.items ()])
         self.__operationCheckTime = datetime.now ()
         timespan = self.__operationCheckTime - oldOperationCheckTime
-        return (self.__operationCount - oldOperationCount) / (timespan.seconds + (timespan.microseconds * 10**6))
+        return (self.__operationCount - oldOperationCount) / (timespan.seconds + (timespan.microseconds / (10.0 ** 6)))
 
     def __getFlushCountChange (self, flushCount):
         oldFlushCount = self.__flushCount
