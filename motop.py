@@ -211,11 +211,8 @@ class Server:
 
     def currentOperations (self):
         for op in self.__execute (self.__connection.admin.current_op) ['inprog']:
-            if op ['op'] == 'query':
-                duration = op ['secs_running'] if 'secs_running' in op else 0
-                yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'])
-            else:
-                yield Operation (self, op ['opid'], op ['op'])
+            duration = op ['secs_running'] if 'secs_running' in op else 0
+            yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'] or None)
 
     def killOperation (self, opid):
         """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
