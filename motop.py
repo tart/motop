@@ -52,7 +52,7 @@ class Value (int):
 
 class Block:
     """Class to print blocks of ordered printables."""
-    def __init__ (self, columnHeaders):
+    def __init__ (self, *columnHeaders):
         self.__columnHeaders = columnHeaders
         self.__columnWidths = [6 for columnHeader in self.__columnHeaders]
 
@@ -156,22 +156,7 @@ class Server:
         self.__name = name
         self.__address = address
         self.__connection = pymongo.Connection (address)
-        self.__operationCount = 0
-        self.__operationCheckTime = datetime.now ()
-        self.__flushCount = 0
-
-    def __getOperationCountChange (self, operationCounts):
-        oldOperationCount = self.__operationCount
-        oldOperationCheckTime = self.__operationCheckTime
-        self.__operationCount = sum ([value for key, value in operationCounts.items ()])
-        self.__operationCheckTime = datetime.now ()
-        timespan = self.__operationCheckTime - oldOperationCheckTime
-        return (self.__operationCount - oldOperationCount) / (timespan.seconds + (timespan.microseconds / (10.0 ** 6)))
-
-    def __getFlushCountChange (self, flushCount):
-        oldFlushCount = self.__flushCount
-        self.__flushCount = flushCount
-        return self.__flushCount - oldFlushCount
+        self.__oldValues = {}
 
     def __execute (self, procedure, *arguments):
         """Try 10 times to execute the procedure."""
@@ -180,20 +165,42 @@ class Server:
                 return procedure (*arguments)
             except pymongo.errors.AutoReconnect: pass
 
+    def __getStatus (self):
+        """Get serverStatus from MongoDB, calculate time difference with the last time."""
+        status = self.__execute (self.__connection.admin.command, 'serverStatus')
+        oldCheckTime = self.__oldValues ['checkTime'] if 'checkTime' in self.__oldValues else None
+        self.__oldValues ['checkTime'] = datetime.now ()
+        if oldCheckTime:
+            self.__timespan = self.__oldValues ['checkTime'] - oldCheckTime
+        return status
+
+    def __statusChangePerSecond (self, name, value):
+        """Calculate the difference of the value in one second with the last time by using time difference calculated
+        on __getStatus."""
+        oldValue = self.__oldValues [name] if name in self.__oldValues else None
+        self.__oldValues [name] = value
+        if oldValue:
+            timespanSeconds = self.__timespan.seconds + (self.__timespan.microseconds / (10.0 ** 6))
+            return Value ((value - oldValue) / timespanSeconds)
+
     def line (self):
-        serverStatus = self.__execute (self.__connection.admin.command, 'serverStatus')
+        serverStatus = self.__getStatus ()
         currentConnection = Value (serverStatus ['connections'] ['current'])
         totalConnection = Value (serverStatus ['connections'] ['available'] + serverStatus ['connections'] ['current'])
         residentMem = Value (serverStatus ['mem'] ['resident'] * (10 ** 6))
         mappedMem = Value (serverStatus ['mem'] ['mapped'] * (10 ** 6))
+        opcounters = serverStatus ['opcounters']
+        networkInChange = self.__statusChangePerSecond ('networkIn', serverStatus ['network'] ['bytesIn'])
+        networkOutChange = self.__statusChangePerSecond ('networkOut', serverStatus ['network'] ['bytesOut'])
         cells = []
         cells.append (str (self))
-        cells.append (str (Value (self.__getOperationCountChange (serverStatus ['opcounters']))))
-        cells.append (str (Value (serverStatus ['globalLock'] ['activeClients'] ['total'])))
-        cells.append (str (Value (serverStatus ['globalLock'] ['currentQueue'] ['total'])))
-        cells.append (str (Value (self.__getFlushCountChange (serverStatus ['backgroundFlushing'] ['flushes']))))
+        cells.append (self.__statusChangePerSecond ('operation', sum ([value for key, value in opcounters.items ()])))
+        cells.append (Value (serverStatus ['globalLock'] ['activeClients'] ['total']))
+        cells.append (Value (serverStatus ['globalLock'] ['currentQueue'] ['total']))
+        cells.append (self.__statusChangePerSecond ('flush', serverStatus ['backgroundFlushing'] ['flushes']))
         cells.append (str (currentConnection) + ' / ' + str (totalConnection))
         cells.append (str (residentMem) + ' / ' + str (mappedMem))
+        cells.append (str (networkInChange) + ' / ' + str (networkOutChange))
         return cells
 
     def explainQuery (self, databaseName, collectionName, query):
@@ -326,8 +333,8 @@ class QueryScreen:
     def __init__ (self, console, servers):
         self.__console = console
         self.__servers = servers
-        self.__serverBlock = Block (('Server', 'QPS', 'Clients', 'Queue', 'Flushes', 'Connections', 'Memory'))
-        self.__queryBlock = Block (('Server', 'OpId', 'State', 'Namespace', 'Sec', 'Query'))
+        self.__serverBlock = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
+        self.__queryBlock = Block ('Server', 'OpId', 'State', 'Namespace', 'Sec', 'Query')
 
     def refresh (self):
         self.__serverBlock.reset ([server for server in self.__servers ])
