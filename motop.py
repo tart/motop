@@ -103,9 +103,10 @@ class Block:
         return [self.__lineClass (*line) for line in self.__lines if condition (line)]
 
 class Operation:
-    def __init__ (self, server, opid, namespace = None, duration = None, query = None):
+    def __init__ (self, server, opid, state, namespace = None, duration = None, query = None):
         self.__server = server
         self.__opid = opid
+        self.__state = state
         self.__namespace = namespace
         self.__duration = duration
         self.__query = json.loads (query, object_hook = json_util.object_hook) if isinstance (query, str) else query
@@ -117,6 +118,7 @@ class Operation:
         cells = []
         cells.append (self.__server)
         cells.append (self.__opid)
+        cells.append (self.__state)
         cells.append (self.__namespace) if self.__namespace is not None else None
         cells.append (self.__duration) if self.__duration is not None else None
         cells.append (json.dumps (self.__query, default = json_util.default)) if self.__query is not None else None
@@ -204,9 +206,9 @@ class Server:
         for op in self.__execute (self.__connection.admin.current_op) ['inprog']:
             if op ['op'] == 'query':
                 duration = op ['secs_running'] if 'secs_running' in op else 0
-                yield Operation (self, op ['opid'], op ['ns'], duration, op ['query'])
+                yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'])
             else:
-                yield Operation (self, op ['opid'])
+                yield Operation (self, op ['opid'], op ['op'])
 
     def killOperation (self, opid):
         """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
@@ -325,7 +327,7 @@ class QueryScreen:
         self.__console = console
         self.__servers = servers
         self.__serverBlock = Block (('Server', 'QPS', 'Clients', 'Queue', 'Flushes', 'Connections', 'Memory'))
-        self.__queryBlock = Block (('Server', 'OpId', 'Namespace', 'Sec', 'Query'))
+        self.__queryBlock = Block (('Server', 'OpId', 'State', 'Namespace', 'Sec', 'Query'))
 
     def refresh (self):
         self.__serverBlock.reset ([server for server in self.__servers ])

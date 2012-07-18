@@ -5,9 +5,9 @@ Realtime monitoring tool for several MongoDB servers. Shows current operations o
 
 ## Actions
 
-q	Quit
+q   Quit
 
-e	Explain the query
+e   Explain the query
 
 k   Kill operation using "mongo" executable
 
