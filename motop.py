@@ -220,7 +220,7 @@ class Server:
     def killOperation (self, opid):
         """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
         pymongo."""
-        os.system ('echo "db.killOp (' + str (opid) + ')" | mongo ' + self.__address)
+        os.system ('echo "db.killOp (' + str (opid) + ')" | mongo --host ' + self.__address)
 
     def __str__ (self):
         return self.__name
