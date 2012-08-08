@@ -56,6 +56,9 @@ class Block:
         self.__columnHeaders = columnHeaders
         self.__columnWidths = [6 for columnHeader in self.__columnHeaders]
 
+    def columnIndex (self, columnHeader):
+        return self.__columnHeaders.index (columnHeader)
+
     def reset (self, printables):
         self.__lines = []
         self.__lineClass = None
@@ -360,7 +363,8 @@ class QueryScreen:
             """Batch kill operations."""
             durationInput = self.__console.askForInput ('Sec')
             if len (durationInput) == 1:
-                condition = lambda line: len (line) >= 3 and line [3] > int (durationInput [0])
+                secIndex = self.__queryBlock.columnIndex ('Sec')
+                condition = lambda line: len (line) >= secIndex and line [secIndex] > int (durationInput [0])
                 operations = self.__queryBlock.findLines (condition)
                 for operation in operations:
                     operation.kill ()
