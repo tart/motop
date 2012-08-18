@@ -22,9 +22,12 @@ K   Kill operations older than given seconds using "mongo" executable
 
 ## Configuration
 
-Configuration file can be created by copying motop.default.conf to motop.conf. Section are used for servers.
+Configuration file can be created by copying motop.default.conf to motop.conf. Section are used for servers. DEFAULT
+section can be used for all servers.
 
-address The address of the server
+address                     The address of the server
+
+hideReplicationOperations   Paramer to hide constantly appeared replication operations on the masters and the slaves
 
 ## License
 

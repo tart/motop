@@ -155,11 +155,15 @@ class Operation:
             print ('Only queries with namespace can be explained.')
 
 class Server:
-    def __init__ (self, name, address):
+    def __init__ (self, name, address, hideReplicationOperations = False):
         self.__name = name
         self.__address = address
+        self.__hideReplicationOperations = hideReplicationOperations
         self.__connection = pymongo.Connection (address)
         self.__oldValues = {}
+
+    def __str__ (self):
+        return self.__name
 
     def __execute (self, procedure, *arguments):
         """Try 10 times to execute the procedure."""
@@ -213,17 +217,24 @@ class Server:
         return self.__execute (cursor.explain)
 
     def currentOperations (self):
+        """Execute currentOp operation on the server. Filter and yield returning operations."""
+        hideReplicationOperations = self.__hideReplicationOperations
         for op in self.__execute (self.__connection.admin.current_op) ['inprog']:
-            duration = op ['secs_running'] if 'secs_running' in op else 0
-            yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'] or None)
+            if hideReplicationOperations and op ['op'] == 'getmore' and op ['ns'] == 'local.oplog.$main':
+                """Condition to find replication operation on the master."""
+                pass
+            elif hideReplicationOperations and op ['op'] and op ['ns'] in ('', 'local.sources'):
+                """Condition to find replication operation on the slave. Do not look for more replication
+                operations if one found."""
+                hideReplicationOperations = False
+            else:
+                duration = op ['secs_running'] if 'secs_running' in op else 0
+                yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'] or None)
 
     def killOperation (self, opid):
         """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
         pymongo."""
         os.system ('echo "db.killOp (' + str (opid) + ')" | mongo --host ' + self.__address)
-
-    def __str__ (self):
-        return self.__name
 
 class ConsoleActivator:
     """Class to use with "with" statement to hide pressed buttons on the console."""
@@ -310,14 +321,16 @@ class Configuration:
         """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
         import the same class for Python 3 compatibility."""
         try:
-            from ConfigParser import ConfigParser
+            from ConfigParser import SafeConfigParser
         except ImportError:
-            from configparser import ConfigParser
-        configParser = ConfigParser ()
+            from configparser import SafeConfigParser
+        configParser = SafeConfigParser ()
         if configParser.read (self.filePath ()):
             servers = []
             for section in configParser.sections ():
-                servers.append (Server (section, configParser.get (section, 'address')))
+                address = configParser.get (section, 'address')
+                hideReplicationOperations = configParser.getboolean (section, 'hideReplicationOperations')
+                servers.append (Server (section, address, hideReplicationOperations))
             return servers
 
     def printInstructions (self):
