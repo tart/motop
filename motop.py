@@ -324,7 +324,7 @@ class Configuration:
             from ConfigParser import SafeConfigParser
         except ImportError:
             from configparser import SafeConfigParser
-        configParser = SafeConfigParser ()
+        configParser = SafeConfigParser ({'hideReplicationOperations': 'off'})
         if configParser.read (self.filePath ()):
             servers = []
             for section in configParser.sections ():
