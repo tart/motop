@@ -218,15 +218,14 @@ class Server:
 
     def currentOperations (self):
         """Execute currentOp operation on the server. Filter and yield returning operations."""
-        hideReplicationOperations = self.__hideReplicationOperations
         for op in self.__execute (self.__connection.admin.current_op) ['inprog']:
-            if hideReplicationOperations and op ['op'] == 'getmore' and op ['ns'] == 'local.oplog.$main':
+            if self.__hideReplicationOperations and op ['op'] == 'getmore' and 'local.oplog.' in op ['ns']:
                 """Condition to find replication operation on the master."""
                 pass
-            elif hideReplicationOperations and op ['op'] and op ['ns'] in ('', 'local.sources'):
+            elif self.__hideReplicationOperations and op ['op'] and op ['ns'] in ('', 'local.sources'):
                 """Condition to find replication operation on the slave. Do not look for more replication
                 operations if one found."""
-                hideReplicationOperations = False
+                pass
             else:
                 duration = op ['secs_running'] if 'secs_running' in op else 0
                 yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'] or None)
