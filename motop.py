@@ -227,7 +227,7 @@ class Server:
                 operations if one found."""
                 pass
             else:
-                duration = op ['secs_running'] if 'secs_running' in op else 0
+                duration = op ['secs_running'] if 'secs_running' in op else None
                 yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'] or None)
 
     def killOperation (self, opid):
