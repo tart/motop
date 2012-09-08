@@ -122,9 +122,12 @@ class Operation:
         cells.append (self.__server)
         cells.append (self.__opid)
         cells.append (self.__state)
-        cells.append (self.__namespace) if self.__namespace is not None else None
-        cells.append (self.__duration) if self.__duration is not None else None
-        cells.append (json.dumps (self.__query, default = json_util.default)) if self.__query is not None else None
+        if self.__duration is not None:
+            cells.append (self.__duration)
+        if self.__namespace is not None:
+            cells.append (self.__namespace)
+        if self.__query is not None:
+            cells.append (json.dumps (self.__query, default = json_util.default))
         return cells
 
     def kill (self):
@@ -346,7 +349,7 @@ class QueryScreen:
         self.__console = console
         self.__servers = servers
         self.__serverBlock = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
-        self.__queryBlock = Block ('Server', 'OpId', 'State', 'Namespace', 'Sec', 'Query')
+        self.__queryBlock = Block ('Server', 'OpId', 'State', 'Sec', 'Namespace', 'Query')
 
     def refresh (self):
         self.__serverBlock.reset ([server for server in self.__servers ])
