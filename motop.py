@@ -158,15 +158,19 @@ class Operation:
             print ('Only queries with namespace can be explained.')
 
 class Server:
-    def __init__ (self, name, address, hideReplicationOperations = False):
+    def __init__ (self, name, address, hideStatus = False, hideReplicationOperations = False):
         self.__name = name
         self.__address = address
+        self.__hideStatus = hideStatus
         self.__hideReplicationOperations = hideReplicationOperations
         self.__connection = pymongo.Connection (address)
         self.__oldValues = {}
 
     def __str__ (self):
         return self.__name
+
+    def hideStatus (self):
+        return self.__hideStatus
 
     def __execute (self, procedure, *arguments):
         """Try 10 times to execute the procedure."""
@@ -326,13 +330,14 @@ class Configuration:
             from ConfigParser import SafeConfigParser
         except ImportError:
             from configparser import SafeConfigParser
-        configParser = SafeConfigParser ({'hideReplicationOperations': 'off'})
+        configParser = SafeConfigParser ({'hideStatus': 'off', 'hideReplicationOperations': 'off'})
         if configParser.read (self.filePath ()):
             servers = []
             for section in configParser.sections ():
                 address = configParser.get (section, 'address')
+                hideStatus = configParser.getboolean (section, 'hideStatus')
                 hideReplicationOperations = configParser.getboolean (section, 'hideReplicationOperations')
-                servers.append (Server (section, address, hideReplicationOperations))
+                servers.append (Server (section, address, hideStatus, hideReplicationOperations))
             return servers
 
     def printInstructions (self):
@@ -345,17 +350,22 @@ class Configuration:
         except IOError: pass
 
 class QueryScreen:
+    __statusBlock = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
+    __queryBlock = Block ('Server', 'OpId', 'State', 'Sec', 'Namespace', 'Query')
+
     def __init__ (self, console, servers):
         self.__console = console
         self.__servers = servers
-        self.__serverBlock = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
-        self.__queryBlock = Block ('Server', 'OpId', 'State', 'Sec', 'Namespace', 'Query')
+        self.__blocks = []
+        if not all ([server.hideStatus () for server in servers]):
+            self.__blocks.append (self.__statusBlock)
+        self.__blocks.append (self.__queryBlock)
 
     def refresh (self):
-        self.__serverBlock.reset ([server for server in self.__servers ])
+        self.__statusBlock.reset (servers)
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
         self.__queryBlock.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
-        self.__console.refresh ((self.__serverBlock, self.__queryBlock))
+        self.__console.refresh (self.__blocks)
 
     def action (self, button):
         """Perform actions for the pressed button."""

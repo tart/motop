@@ -27,6 +27,8 @@ section can be used for all servers.
 
 address                     The address of the server
 
+hideStatus                  Paramer to hide status for the server
+
 hideReplicationOperations   Paramer to hide constantly appeared replication operations on the masters and the slaves
 
 ## License
