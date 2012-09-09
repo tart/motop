@@ -79,7 +79,7 @@ class Block:
         for index, cell in enumerate (line):
             if width < len (self.__columnHeaders [index]):
                 break
-            cell = str (cell)
+            cell = str (cell) if cell is not None else ''
             self.__columnWidths [index] = min (width, max (len (cell) + 2, self.__columnWidths [index]))
             if bold and sys.stdout.isatty ():
                 print ('\x1b[1m', end = '')
@@ -97,7 +97,7 @@ class Block:
         for line in self.__lines:
             if height <= 1:
                 break
-            assert len (line) <= len (self.__columnHeaders)
+            assert len (line) == len (self.__columnHeaders)
             height -= 1
             self.__printLine (line, width)
 
@@ -122,12 +122,9 @@ class Operation:
         cells.append (self.__server)
         cells.append (self.__opid)
         cells.append (self.__state)
-        if self.__duration is not None:
-            cells.append (self.__duration)
-        if self.__namespace is not None:
-            cells.append (self.__namespace)
-        if self.__query is not None:
-            cells.append (json.dumps (self.__query, default = json_util.default))
+        cells.append (self.__duration)
+        cells.append (self.__namespace)
+        cells.append (json.dumps (self.__query, default = json_util.default) if self.__query else None)
         return cells
 
     def kill (self):
@@ -175,13 +172,13 @@ class ReplicaSetMember:
     def revise (self, otherMember):
         """Merge properties of the other replica set member with following rules."""
         assert self.__state == otherMember.__state
-        if otherMember.__uptime != None:
-            if self.__uptime == None or self.__uptime < otherMember.__uptime:
+        if otherMember.__uptime is not None:
+            if self.__uptime is None or self.__uptime < otherMember.__uptime:
                   self.__uptime = otherMember.__uptime
         if otherMember.__replicaSet.masterState ():
             self.__lag = otherMember.__lag
-        if otherMember.__ping != None:
-            if self.__ping == None or self.__ping < otherMember.__ping:
+        if otherMember.__ping is not None:
+            if self.__ping is None or self.__ping < otherMember.__ping:
                 self.__ping = otherMember.__ping
 
     def line (self):
