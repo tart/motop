@@ -35,7 +35,7 @@ import signal
 import pymongo
 from bson import json_util
 from time import sleep
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class Value (int):
     """Class extents int to show big numbers human readable."""
@@ -157,6 +157,73 @@ class Operation:
         else:
             print ('Only queries with namespace can be explained.')
 
+class ReplicaSetMember:
+    def __init__ (self, replicaSet, name, state, uptime, lag, ping):
+        self.__replicaSet = replicaSet
+        self.__name = name
+        self.__state = state.lower ()
+        self.__uptime = uptime
+        self.__lag = lag
+        self.__ping = ping
+
+    def __str__ (self):
+        return self.__name
+
+    def __eq__ (self, other):
+        return self.__name == other.__name
+
+    def revise (self, otherMember):
+        """Merge properties of the other replica set member with following rules."""
+        assert self.__state == otherMember.__state
+        if otherMember.__uptime != None:
+            if self.__uptime == None or self.__uptime < otherMember.__uptime:
+                  self.__uptime = otherMember.__uptime
+        if otherMember.__replicaSet.masterState ():
+            self.__lag = otherMember.__lag
+        if otherMember.__ping != None:
+            if self.__ping == None or self.__ping < otherMember.__ping:
+                self.__ping = otherMember.__ping
+
+    def line (self):
+        cells = []
+        cells.append (str (self.__replicaSet))
+        cells.append (self.__name)
+        cells.append (self.__state)
+        cells.append (self.__uptime)
+        cells.append (self.__lag)
+        cells.append (self.__ping)
+        return cells
+
+class ReplicaSet:
+    def __init__ (self, name, state):
+        self.__name = name
+        self.__state = state
+        self.__members = []
+
+    def __str__ (self):
+        return self.__name
+
+    def __eq__ (self, other):
+        return self.__name == other.__name
+
+    def masterState (self):
+        return self.__state == 1
+
+    def addMember (self, *args):
+        self.__members.append (ReplicaSetMember (self, *args))
+
+    def members (self):
+        return self.__members
+
+    def findMember (self, name):
+        for member in self.__members:
+            if str (member) == name:
+                return member
+
+    def revise (self, other):
+        for member in self.__members:
+            member.revise (other.findMember (str (member)))
+
 class Server:
     def __init__ (self, name, address, hideStatus = False, hideReplicationOperations = False):
         self.__name = name
@@ -217,11 +284,17 @@ class Server:
         cells.append (str (networkInChange) + ' / ' + str (networkOutChange))
         return cells
 
-    def explainQuery (self, databaseName, collectionName, query):
-        database = getattr (self.__connection, databaseName)
-        collection = getattr (database, collectionName)
-        cursor = self.__execute (collection.find, query)
-        return self.__execute (cursor.explain)
+    def replicaSet (self):
+        try:
+            replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
+            replicaSet = ReplicaSet (replicaSetStatus ['set'], replicaSetStatus ['myState'])
+            for member in replicaSetStatus ['members']:
+                uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
+                ping = member ['pingMs'] if 'pingMs' in member else None
+                lag = replicaSetStatus ['date'] - member ['optimeDate']
+                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, ping)
+            return replicaSet
+        except pymongo.errors.OperationFailure: pass
 
     def currentOperations (self):
         """Execute currentOp operation on the server. Filter and yield returning operations."""
@@ -236,6 +309,12 @@ class Server:
             else:
                 duration = op ['secs_running'] if 'secs_running' in op else None
                 yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'] or None)
+
+    def explainQuery (self, databaseName, collectionName, query):
+        database = getattr (self.__connection, databaseName)
+        collection = getattr (database, collectionName)
+        cursor = self.__execute (collection.find, query)
+        return self.__execute (cursor.explain)
 
     def killOperation (self, opid):
         """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
@@ -351,7 +430,8 @@ class Configuration:
 
 class QueryScreen:
     __statusBlock = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
-    __queryBlock = Block ('Server', 'OpId', 'State', 'Sec', 'Namespace', 'Query')
+    __replicaSetBlock = Block ('ReplicaSet', 'Member', 'State', 'Uptime', 'Lag', 'Ping')
+    __queryBlock = Block ('Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query')
 
     def __init__ (self, console, servers):
         self.__console = console
@@ -359,10 +439,27 @@ class QueryScreen:
         self.__blocks = []
         if not all ([server.hideStatus () for server in servers]):
             self.__blocks.append (self.__statusBlock)
+        self.__blocks.append (self.__replicaSetBlock)
         self.__blocks.append (self.__queryBlock)
+
+    def __replicaSets (self):
+        """Return unique replica sets of the servers."""
+        replicaSets = []
+        def add (replicaSet):
+            """Merge same replica sets by revising the existent one."""
+            for existentReplicaSet in replicaSets:
+                if existentReplicaSet == replicaSet:
+                    return existentReplicaSet.revise (replicaSet)
+            return replicaSets.append (replicaSet)
+        for server in self.__servers:
+            replicaSet = server.replicaSet ()
+            if replicaSet:
+                add (replicaSet)
+        return replicaSets
 
     def refresh (self):
         self.__statusBlock.reset (servers)
+        self.__replicaSetBlock.reset ([member for replicaSet in self.__replicaSets () for member in replicaSet.members ()])
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
         self.__queryBlock.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
         self.__console.refresh (self.__blocks)
@@ -371,7 +468,7 @@ class QueryScreen:
         """Perform actions for the pressed button."""
         while button in ('e', 'k'):
             """Kill or explain single operation."""
-            operationInput = self.__console.askForInput ('Server', 'OpId')
+            operationInput = self.__console.askForInput ('Server', 'Opid')
             if len (operationInput) == 2:
                 condition = lambda line: str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
                 operations = self.__queryBlock.findLines (condition)
