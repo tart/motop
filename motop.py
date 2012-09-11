@@ -222,19 +222,15 @@ class ReplicaSet:
             member.revise (other.findMember (str (member)))
 
 class Server:
-    def __init__ (self, name, address, hideStatus = False, hideReplicationOperations = False):
+    def __init__ (self, name, address, hideReplicationOperations = False):
         self.__name = name
         self.__address = address
-        self.__hideStatus = hideStatus
         self.__hideReplicationOperations = hideReplicationOperations
         self.__connection = pymongo.Connection (address)
         self.__oldValues = {}
 
     def __str__ (self):
         return self.__name
-
-    def hideStatus (self):
-        return self.__hideStatus
 
     def __execute (self, procedure, *arguments):
         """Try 10 times to execute the procedure."""
@@ -396,45 +392,55 @@ class Console:
         return values
 
 class Configuration:
-    def filePath (self, default = False):
-        return os.path.splitext (__file__) [0] + ('.default' if default else '') + '.conf'
+    __filePath = os.path.splitext (__file__) [0] + '.conf'
+    __defaultFilePath = os.path.splitext (__file__) [0] + '.default.conf'
+    __booleanVariables = ['hideStatus', 'hideReplicationOperations']
 
-    def servers (self):
+    def printInstructions (self):
+        """Print the default configuration file if exists."""
+        print ('Please create a configuration file: ' + self.__filePath)
+        try:
+            with open (self.__defaultFilePath) as defaultConfigurationFile:
+                print ('Like this:')
+                print (defaultConfigurationFile.read ())
+        except IOError: pass
+
+    def __init__ (self):
         """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
         import the same class for Python 3 compatibility."""
         try:
             from ConfigParser import SafeConfigParser
         except ImportError:
             from configparser import SafeConfigParser
-        configParser = SafeConfigParser ({'hideStatus': 'off', 'hideReplicationOperations': 'off'})
-        if configParser.read (self.filePath ()):
-            servers = []
-            for section in configParser.sections ():
-                address = configParser.get (section, 'address')
-                hideStatus = configParser.getboolean (section, 'hideStatus')
-                hideReplicationOperations = configParser.getboolean (section, 'hideReplicationOperations')
-                servers.append (Server (section, address, hideStatus, hideReplicationOperations))
-            return servers
+        self.__configParser = SafeConfigParser ({variable: 'off' for variable in self.__booleanVariables})
+        self.__configParser.read (self.__filePath)
 
-    def printInstructions (self):
-        """Print the default configuration file if exists."""
-        print ('Please create a configuration file: ' + self.filePath ())
-        try:
-            with open (self.filePath (default = True)) as defaultConfigurationFile:
-                print ('Like this:')
-                print (defaultConfigurationFile.read ())
-        except IOError: pass
+    def sections (self):
+        if self.__configParser:
+            return self.__configParser.sections ()
+
+    def booleanVariableTrueSections (self, variable):
+        assert variable in self.__booleanVariables
+        return [section for section in self.sections () if self.__configParser.getboolean (section, variable)]
+
+    def servers (self):
+        servers = []
+        for section in self.sections ():
+            servers.append (Server (section, self.__configParser.get (section, 'address'),
+                                    self.booleanVariableTrueSections ('hideReplicationOperations')))
+        return servers
 
 class QueryScreen:
     __statusBlock = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
     __replicaSetBlock = Block ('ReplicaSet', 'Member', 'State', 'Uptime', 'Lag', 'Ping')
     __queryBlock = Block ('Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query')
 
-    def __init__ (self, console, servers):
+    def __init__ (self, console, servers, hiddenStatus):
         self.__console = console
         self.__servers = servers
+        self.__hiddenStatus = hiddenStatus
         self.__blocks = []
-        if not all ([server.hideStatus () for server in servers]):
+        if not all ([str (server) in hiddenStatus for server in servers]):
             self.__blocks.append (self.__statusBlock)
         self.__blocks.append (self.__replicaSetBlock)
         self.__blocks.append (self.__queryBlock)
@@ -455,7 +461,7 @@ class QueryScreen:
         return replicaSets
 
     def refresh (self):
-        self.__statusBlock.reset (servers)
+        self.__statusBlock.reset (server for server in self.__servers if str (server) not in self.__hiddenStatus)
         self.__replicaSetBlock.reset ([member for replicaSet in self.__replicaSets () for member in replicaSet.members ()])
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
         self.__queryBlock.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
@@ -492,11 +498,11 @@ if __name__ == '__main__':
     """Run the main program."""
     try:
         configuration = Configuration ()
-        servers = configuration.servers ()
-        if servers:
+        if configuration.sections ():
             button = None
             with ConsoleActivator () as console:
-                queryScreen = QueryScreen (console, servers)
+                queryScreen = QueryScreen (console, configuration.servers (),
+                                           configuration.booleanVariableTrueSections ('hideStatus'))
                 while button != 'q':
                     queryScreen.refresh ()
                     button = console.checkButton (1)
