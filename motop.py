@@ -255,11 +255,12 @@ class ReplicaSet:
             member.revise (other.findMember (str (member)))
 
 class Server:
+    __readPreference = pymongo.ReadPreference.SECONDARY
     def __init__ (self, name, address, hideReplicationOperations = False):
         self.__name = name
         self.__address = address
         self.__hideReplicationOperations = hideReplicationOperations
-        self.__connection = pymongo.Connection (address)
+        self.__connection = pymongo.Connection (address, read_preference = self.__readPreference)
         self.__oldValues = {}
 
     def __str__ (self):
