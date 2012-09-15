@@ -136,15 +136,15 @@ class Operation:
 
     def __queryParts (self):
         """Translate query parts to arguments of pymongo find method."""
-        if any ([key in ('query', '$query') for key in self.__query.iterkeys ()]):
+        if any ([key in ('query', '$query') for key in self.__query.keys ()]):
             queryParts = {}
-            for key, value in self.__query.iteritems ():
+            for key, value in self.__query.items ():
                 if key in ('query', '$query'):
                     queryParts ['spec'] = value
                 elif key in ('explain', '$explain'):
                     queryParts ['explain'] = True
                 elif key in ('orderby', '$orderby'):
-                    queryParts ['sort'] = [(key, value) for key, value in value.iteritems ()]
+                    queryParts ['sort'] = [(key, value) for key, value in value.items ()]
                 else:
                     raise Exception ('Unknown query part: ' + key)
             return queryParts
@@ -153,7 +153,7 @@ class Operation:
     def examine (self):
         """Print the query parts."""
         queryParts = self.__queryParts ()
-        for key, value in queryParts.iteritems ():
+        for key, value in queryParts.items ():
             print (key.title () + ':', end = ' ')
             if isinstance (value, list):
                 print (', '.join ([pair [0] + ': ' + str (pair [1]) for pair in value]))
