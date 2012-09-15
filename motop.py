@@ -106,12 +106,12 @@ class Block:
         return [self.__lineClass (*line) for line in self.__lines if condition (line)]
 
 class Operation:
-    def __init__ (self, server, opid, state, namespace = None, duration = None, query = None):
+    def __init__ (self, server, opid, state, duration = None, namespace = None, query = None):
         self.__server = server
         self.__opid = opid
         self.__state = state
-        self.__namespace = namespace
         self.__duration = duration
+        self.__namespace = namespace
         self.__query = json.loads (query, object_hook = json_util.object_hook) if isinstance (query, str) else query
 
     def sortOrder (self):
@@ -301,7 +301,7 @@ class Server:
                 pass
             else:
                 duration = op ['secs_running'] if 'secs_running' in op else None
-                yield Operation (self, op ['opid'], op ['op'], op ['ns'], duration, op ['query'] or None)
+                yield Operation (self, op ['opid'], op ['op'], duration, op ['ns'], op ['query'] or None)
 
     def explainQuery (self, databaseName, collectionName, query):
         database = getattr (self.__connection, databaseName)
