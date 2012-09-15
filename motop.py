@@ -130,12 +130,41 @@ class Operation:
     def kill (self):
         return self.__server.killOperation (self.__opid)
 
-    def printExplain (self):
-        """Print the query and the output of the explain command executed on the server."""
-        if self.__namespace and self.__query:
-            print ('Query:', json.dumps (self.__query, default = json_util.default, indent = 4))
+    def __queryParts (self):
+        """Translate query parts to arguments of pymongo find method."""
+        if any ([key in ('query', '$query') for key in self.__query.iterkeys ()]):
+            queryParts = {}
+            for key, value in self.__query.iteritems ():
+                if key in ('query', '$query'):
+                    queryParts ['spec'] = value
+                elif key in ('explain', '$explain'):
+                    queryParts ['explain'] = True
+                elif key in ('orderby', '$orderby'):
+                    queryParts ['sort'] = [(key, value) for key, value in value.iteritems ()]
+                else:
+                    raise Exception ('Unknown query part: ' + key)
+            return queryParts
+        return {'spec': self.__query}
+
+    def examine (self):
+        """Print the query parts."""
+        queryParts = self.__queryParts ()
+        for key, value in queryParts.iteritems ():
+            print (key.title () + ':', end = ' ')
+            if isinstance (value, list):
+                print (', '.join ([pair [0] + ': ' + str (pair [1]) for pair in value]))
+            elif isinstance (value, dict):
+                print (json.dumps (value, default = json_util.default, indent = 4))
+            else:
+                print (value)
+
+    def explain (self):
+        """Print the output of the explain command executed on the server."""
+        if self.__namespace:
             databaseName, collectionName = self.__namespace.split ('.', 1)
-            explainOutput = self.__server.explainQuery (databaseName, collectionName, self.__query)
+            queryParts = self.__queryParts ()
+            assert 'explain' not in queryParts
+            explainOutput = self.__server.explainQuery (databaseName, collectionName, **queryParts)
             print ('Cursor:', explainOutput ['cursor'])
             print ('Indexes:', end = ' ')
             for index in explainOutput ['indexBounds']:
@@ -232,11 +261,11 @@ class Server:
     def __str__ (self):
         return self.__name
 
-    def __execute (self, procedure, *arguments):
+    def __execute (self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
         for tryCount in range (10):
             try:
-                return procedure (*arguments)
+                return procedure (*args, **kwargs)
             except pymongo.errors.AutoReconnect: pass
 
     def __getStatus (self):
@@ -478,7 +507,8 @@ class QueryScreen:
                 if len (operations) == 1:
                     operation = operations [0]
                     if button == 'e':
-                        operation.printExplain ()
+                        operation.examine ()
+                        operation.explain ()
                     elif button == 'k':
                         operation.kill ()
                     button = self.__console.checkButton ()
