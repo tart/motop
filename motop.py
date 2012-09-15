@@ -97,7 +97,7 @@ class Block:
         for line in self.__lines:
             if height <= 1:
                 break
-            assert len (line) == len (self.__columnHeaders)
+            assert len (line) <= len (self.__columnHeaders)
             height -= 1
             self.__printLine (line, width)
 
@@ -124,7 +124,11 @@ class Operation:
         cells.append (self.__state)
         cells.append (self.__duration)
         cells.append (self.__namespace)
-        cells.append (json.dumps (self.__query, default = json_util.default) if self.__query else None)
+        if self.__query:
+            if '$msg' in self.__query:
+                cells.append (self.__query ['$msg'])
+            else:
+                cells.append (json.dumps (self.__query, default = json_util.default))
         return cells
 
     def kill (self):
@@ -323,19 +327,17 @@ class Server:
         for op in self.__execute (self.__connection.admin.current_op) ['inprog']:
             if self.__hideReplicationOperations and op ['op'] == 'getmore' and 'local.oplog.' in op ['ns']:
                 """Condition to find replication operation on the master."""
-                pass
-            elif self.__hideReplicationOperations and op ['op'] and op ['ns'] in ('', 'local.sources'):
+                continue
+            if self.__hideReplicationOperations and op ['op'] and op ['ns'] in ('', 'local.sources'):
                 """Condition to find replication operation on the slave. Do not look for more replication
                 operations if one found."""
-                pass
-            else:
-                duration = op ['secs_running'] if 'secs_running' in op else None
-                yield Operation (self, op ['opid'], op ['op'], duration, op ['ns'], op ['query'] or None)
+                continue
+            duration = op ['secs_running'] if 'secs_running' in op else None
+            yield Operation (self, op ['opid'], op ['op'], duration, op ['ns'], op ['query'] or None)
 
-    def explainQuery (self, databaseName, collectionName, query):
-        database = getattr (self.__connection, databaseName)
-        collection = getattr (database, collectionName)
-        cursor = self.__execute (collection.find, query)
+    def explainQuery (self, databaseName, collectionName, **kwargs):
+        collection = getattr (getattr (self.__connection, databaseName), collectionName)
+        cursor = self.__execute (collection.find, **kwargs)
         return self.__execute (cursor.explain)
 
     def killOperation (self, opid):
