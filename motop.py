@@ -54,7 +54,7 @@ class Block:
     """Class to print blocks of ordered printables."""
     def __init__ (self, *columnHeaders):
         self.__columnHeaders = columnHeaders
-        self.__columnWidths = [6 for columnHeader in self.__columnHeaders]
+        self.__columnWidths = [6] * len (self.__columnHeaders)
 
     def columnIndex (self, columnHeader):
         return self.__columnHeaders.index (columnHeader)
@@ -207,7 +207,7 @@ class ReplicaSetMember:
         assert self.__state == otherMember.__state
         if otherMember.__uptime is not None:
             if self.__uptime is None or self.__uptime < otherMember.__uptime:
-                  self.__uptime = otherMember.__uptime
+                self.__uptime = otherMember.__uptime
         if otherMember.__replicaSet.masterState ():
             self.__lag = otherMember.__lag
         if otherMember.__ping is not None:
@@ -270,10 +270,14 @@ class Server:
 
     def __execute (self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
-        for tryCount in range (10):
+        tryCount = 1
+        while True:
             try:
                 return procedure (*args, **kwargs)
-            except pymongo.errors.AutoReconnect: pass
+            except pymongo.errors.AutoReconnect:
+                tryCount += 1
+                if tryCount >= 10:
+                    raise self.ExecuteFailure ()
             except pymongo.errors.OperationFailure:
                 raise self.ExecuteFailure ()
 
@@ -306,7 +310,7 @@ class Server:
         networkOutChange = self.__statusChangePerSecond ('networkOut', serverStatus ['network'] ['bytesOut'])
         cells = []
         cells.append (str (self))
-        cells.append (self.__statusChangePerSecond ('operation', sum ([value for key, value in opcounters.items ()])))
+        cells.append (self.__statusChangePerSecond ('operation', sum (opcounters.values ())))
         cells.append (Value (serverStatus ['globalLock'] ['activeClients'] ['total']))
         cells.append (Value (serverStatus ['globalLock'] ['currentQueue'] ['total']))
         cells.append (self.__statusChangePerSecond ('flush', serverStatus ['backgroundFlushing'] ['flushes']))
@@ -390,7 +394,8 @@ class Console:
         """Check one character input. Waits for approximately waitTime parameter as seconds. Waits for input if no
         parameter given."""
         if waitTime:
-            for timer in range (waitTime * 10):
+            while waitTime > 0:
+                waitTime -= 0.1
                 sleep (0.1)
                 if select.select ([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
                     return sys.stdin.read (1)
