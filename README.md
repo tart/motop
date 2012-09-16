@@ -27,7 +27,9 @@ section can be used for all servers.
 
 address                     The address of the server
 
-hideStatus                  Paramer to hide status for the server
+hideStatus                  Paramer to disable status check for the server
+
+hideReplicaSet              Paramer to disable replica set status check for the server
 
 hideReplicationOperations   Paramer to hide constantly appeared replication operations on the masters and the slaves
 

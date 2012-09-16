@@ -266,12 +266,16 @@ class Server:
     def __str__ (self):
         return self.__name
 
+    class ExecuteFailure (Exception): pass
+
     def __execute (self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
         for tryCount in range (10):
             try:
                 return procedure (*args, **kwargs)
             except pymongo.errors.AutoReconnect: pass
+            except pymongo.errors.OperationFailure:
+                raise self.ExecuteFailure ()
 
     def __getStatus (self):
         """Get serverStatus from MongoDB, calculate time difference with the last time."""
@@ -312,16 +316,14 @@ class Server:
         return cells
 
     def replicaSet (self):
-        try:
-            replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
-            replicaSet = ReplicaSet (replicaSetStatus ['set'], replicaSetStatus ['myState'])
-            for member in replicaSetStatus ['members']:
-                uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
-                ping = member ['pingMs'] if 'pingMs' in member else None
-                lag = replicaSetStatus ['date'] - member ['optimeDate']
-                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, ping)
-            return replicaSet
-        except pymongo.errors.OperationFailure: pass
+        replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
+        replicaSet = ReplicaSet (replicaSetStatus ['set'], replicaSetStatus ['myState'])
+        for member in replicaSetStatus ['members']:
+            uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
+            ping = member ['pingMs'] if 'pingMs' in member else None
+            lag = replicaSetStatus ['date'] - member ['optimeDate']
+            replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, ping)
+        return replicaSet
 
     def currentOperations (self):
         """Execute currentOp operation on the server. Filter and yield returning operations."""
@@ -426,7 +428,7 @@ class Console:
 class Configuration:
     __filePath = os.path.splitext (__file__) [0] + '.conf'
     __defaultFilePath = os.path.splitext (__file__) [0] + '.default.conf'
-    __booleanVariables = ['hideStatus', 'hideReplicationOperations']
+    __booleanVariables = ['hideStatus', 'hideReplicaSet', 'hideReplicationOperations']
 
     def printInstructions (self):
         """Print the default configuration file if exists."""
@@ -467,14 +469,16 @@ class QueryScreen:
     __replicaSetBlock = Block ('ReplicaSet', 'Member', 'State', 'Uptime', 'Lag', 'Ping')
     __queryBlock = Block ('Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query')
 
-    def __init__ (self, console, servers, hiddenStatus):
+    def __init__ (self, console, servers, hiddenStatus, hiddenReplicaSet):
         self.__console = console
         self.__servers = servers
         self.__hiddenStatus = hiddenStatus
+        self.__hiddenReplicaSet = hiddenReplicaSet
         self.__blocks = []
-        if not all ([str (server) in hiddenStatus for server in servers]):
+        if any ([str (server) not in hiddenStatus for server in servers]):
             self.__blocks.append (self.__statusBlock)
-        self.__blocks.append (self.__replicaSetBlock)
+        if any ([str (server) not in hiddenReplicaSet for server in servers]):
+            self.__blocks.append (self.__replicaSetBlock)
         self.__blocks.append (self.__queryBlock)
 
     def __replicaSets (self):
@@ -487,14 +491,18 @@ class QueryScreen:
                     return existentReplicaSet.revise (replicaSet)
             return replicaSets.append (replicaSet)
         for server in self.__servers:
-            replicaSet = server.replicaSet ()
-            if replicaSet:
-                add (replicaSet)
+            if str (server) not in self.__hiddenReplicaSet:
+                try:
+                    add (server.replicaSet ())
+                except Server.ExecuteFailure:
+                    self.__hiddenReplicaSet.append (str (server))
+                    if all ([str (server) in self.__hiddenReplicaSet for server in self.__servers]):
+                        self.__blocks.remove (self.__replicaSetBlock)
         return replicaSets
 
     def refresh (self):
         self.__statusBlock.reset (server for server in self.__servers if str (server) not in self.__hiddenStatus)
-        self.__replicaSetBlock.reset ([member for replicaSet in self.__replicaSets () for member in replicaSet.members ()])
+        self.__replicaSetBlock.reset ([member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ()])
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
         self.__queryBlock.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
         self.__console.refresh (self.__blocks)
@@ -535,7 +543,8 @@ if __name__ == '__main__':
             button = None
             with ConsoleActivator () as console:
                 queryScreen = QueryScreen (console, configuration.servers (),
-                                           configuration.booleanVariableTrueSections ('hideStatus'))
+                                           configuration.booleanVariableTrueSections ('hideStatus'),
+                                           configuration.booleanVariableTrueSections ('hideReplicaSet'))
                 while button != 'q':
                     queryScreen.refresh ()
                     button = console.checkButton (1)
