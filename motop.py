@@ -8,7 +8,7 @@
 # Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby
 # granted, provided that the above copyright notice and this permission notice appear in all copies.
 # 
-# The software Is provided "as is" and the author disclaims all warranties with regard to ths software includIng all
+# The software is provided "as is" and the author disclaims all warranties with regard to the software including all
 # implied warranties of merchantability and fitness. In no event shall the author be liable for any special, direct,
 # indirect, or consequential damages or any damages whatsoever resulting from loss of use, data or profits, whether in
 # an action of contract, negligence or other tortious action, arising out of or in connection with the use or
@@ -55,9 +55,6 @@ class Block:
     def __init__ (self, *columnHeaders):
         self.__columnHeaders = columnHeaders
         self.__columnWidths = [6] * len (self.__columnHeaders)
-
-    def columnIndex (self, columnHeader):
-        return self.__columnHeaders.index (columnHeader)
 
     def reset (self, printables):
         self.__lines = []
@@ -136,6 +133,7 @@ class Operation:
 
     def __queryParts (self):
         """Translate query parts to arguments of pymongo find method."""
+        assert isinstance (self.__query, dict)
         if any ([key in ('query', '$query') for key in self.__query.keys ()]):
             queryParts = {}
             for key, value in self.__query.items ():
@@ -505,57 +503,65 @@ class QueryScreen:
                         self.__blocks.remove (self.__replicaSetBlock)
         return replicaSets
 
-    def refresh (self):
+    def __refresh (self):
         self.__statusBlock.reset (server for server in self.__servers if str (server) not in self.__hiddenStatus)
         self.__replicaSetBlock.reset ([member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ()])
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
         self.__queryBlock.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
         self.__console.refresh (self.__blocks)
 
-    def action (self, button):
-        """Perform actions for the pressed button."""
-        while button in ('e', 'k'):
-            """Kill or explain single operation."""
-            operationInput = self.__console.askForInput ('Server', 'Opid')
-            if len (operationInput) == 2:
-                condition = lambda line: str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
-                operations = self.__queryBlock.findLines (condition)
-                if len (operations) == 1:
-                    operation = operations [0]
-                    if button == 'e':
-                        operation.examine ()
-                        operation.explain ()
-                    elif button == 'k':
-                        operation.kill ()
-                    button = self.__console.checkButton ()
-            else:
-                button = None
-        if button == 'K':
-            """Batch kill operations."""
-            durationInput = self.__console.askForInput ('Sec')
-            if len (durationInput) == 1:
-                secIndex = self.__queryBlock.columnIndex ('Sec')
-                condition = lambda line: len (line) >= secIndex and line [secIndex] > int (durationInput [0])
-                operations = self.__queryBlock.findLines (condition)
-                for operation in operations:
-                    operation.kill ()
+    def __askForOperation (self):
+        operationInput = self.__console.askForInput ('Server', 'Opid')
+        if len (operationInput) == 2:
+            condition = lambda line: str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
+            operations = self.__queryBlock.findLines (condition)
+            if len (operations) == 1:
+                return operations [0]
+
+    def __explainAction (self):
+        operation = self.__askForOperation ()
+        if operation:
+            operation.examine ()
+            operation.explain ()
+
+    def __killAction (self):
+        operation = self.__askForOperation ()
+        if operation:
+            operation.kill ()
+
+    def __batchKillAction (self):
+        durationInput = self.__console.askForInput ('Sec')
+        if durationInput:
+            condition = lambda line: len (line) >= 4 and line [4] > int (durationInput [0])
+            operations = self.__queryBlock.findLines (condition)
+            for operation in operations:
+                operation.kill ()
+
+    def action (self):
+        """Refresh the screen, perform actions for the pressed button."""
+        button = None
+        while button != 'q':
+            self.__refresh ()
+            button = self.__console.checkButton (1)
+            while button in ('e', 'k'):
+                if button == 'e':
+                    self.__explainAction ()
+                elif button == 'k':
+                    self.__killAction ()
+                button = self.__console.checkButton ()
+            if button == 'K':
+                self.__batchKillAction ()
 
 if __name__ == '__main__':
     """Run the main program."""
-    try:
-        configuration = Configuration ()
-        if configuration.sections ():
-            button = None
-            with ConsoleActivator () as console:
-                queryScreen = QueryScreen (console, configuration.servers (),
-                                           configuration.booleanVariableTrueSections ('hideStatus'),
-                                           configuration.booleanVariableTrueSections ('hideReplicaSet'))
-                while button != 'q':
-                    queryScreen.refresh ()
-                    button = console.checkButton (1)
-                    try:
-                        queryScreen.action (button)
-                    except KeyboardInterrupt: pass
-        else:
-            configuration.printInstructions ()
-    except KeyboardInterrupt: pass
+    configuration = Configuration ()
+    if configuration.sections ():
+        with ConsoleActivator () as console:
+            queryScreen = QueryScreen (console, configuration.servers (),
+                                       configuration.booleanVariableTrueSections ('hideStatus'),
+                                       configuration.booleanVariableTrueSections ('hideReplicaSet'))
+            try:
+                queryScreen.action ()
+            except KeyboardInterrupt: pass
+    else:
+        configuration.printInstructions ()
