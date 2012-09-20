@@ -431,7 +431,7 @@ class Console:
 class Configuration:
     __filePath = os.path.splitext (__file__) [0] + '.conf'
     __defaultFilePath = os.path.splitext (__file__) [0] + '.default.conf'
-    __booleanVariables = ['hideStatus', 'hideReplicaSet', 'hideReplicationOperations']
+    __booleanVariables = {'status': 'on', 'replicaSet': 'on', 'hideReplicationOperations': 'off'}
 
     def printInstructions (self):
         """Print the default configuration file if exists."""
@@ -449,7 +449,7 @@ class Configuration:
             from ConfigParser import SafeConfigParser
         except ImportError:
             from configparser import SafeConfigParser
-        self.__configParser = SafeConfigParser ({variable: 'off' for variable in self.__booleanVariables})
+        self.__configParser = SafeConfigParser (self.__booleanVariables)
         self.__configParser.read (self.__filePath)
 
     def sections (self):
@@ -472,15 +472,15 @@ class QueryScreen:
     __replicaSetBlock = Block ('ReplicaSet', 'Member', 'State', 'Uptime', 'Lag', 'Ping')
     __queryBlock = Block ('Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query')
 
-    def __init__ (self, console, servers, hiddenStatus, hiddenReplicaSet):
+    def __init__ (self, console, servers, activeStatus, activeReplicaSet):
         self.__console = console
         self.__servers = servers
-        self.__hiddenStatus = hiddenStatus
-        self.__hiddenReplicaSet = hiddenReplicaSet
+        self.__activeStatus = activeStatus
+        self.__activeReplicaSet = activeReplicaSet
         self.__blocks = []
-        if any ([str (server) not in hiddenStatus for server in servers]):
+        if any ([str (server) in activeStatus for server in servers]):
             self.__blocks.append (self.__statusBlock)
-        if any ([str (server) not in hiddenReplicaSet for server in servers]):
+        if any ([str (server) in activeReplicaSet for server in servers]):
             self.__blocks.append (self.__replicaSetBlock)
         self.__blocks.append (self.__queryBlock)
 
@@ -494,17 +494,17 @@ class QueryScreen:
                     return existentReplicaSet.revise (replicaSet)
             return replicaSets.append (replicaSet)
         for server in self.__servers:
-            if str (server) not in self.__hiddenReplicaSet:
+            if str (server) in self.__activeReplicaSet:
                 try:
                     add (server.replicaSet ())
                 except Server.ExecuteFailure:
-                    self.__hiddenReplicaSet.append (str (server))
-                    if all ([str (server) in self.__hiddenReplicaSet for server in self.__servers]):
+                    self.__activeReplicaSet.remove (str (server))
+                    if not any ([str (server) in self.__activeReplicaSet for server in self.__servers]):
                         self.__blocks.remove (self.__replicaSetBlock)
         return replicaSets
 
     def __refresh (self):
-        self.__statusBlock.reset (server for server in self.__servers if str (server) not in self.__hiddenStatus)
+        self.__statusBlock.reset (server for server in self.__servers if str (server) in self.__activeStatus)
         self.__replicaSetBlock.reset ([member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ()])
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
         self.__queryBlock.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
@@ -558,8 +558,8 @@ if __name__ == '__main__':
     if configuration.sections ():
         with ConsoleActivator () as console:
             queryScreen = QueryScreen (console, configuration.servers (),
-                                       configuration.booleanVariableTrueSections ('hideStatus'),
-                                       configuration.booleanVariableTrueSections ('hideReplicaSet'))
+                                       configuration.booleanVariableTrueSections ('status'),
+                                       configuration.booleanVariableTrueSections ('replicaSet'))
             try:
                 queryScreen.action ()
             except KeyboardInterrupt: pass
