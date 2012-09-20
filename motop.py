@@ -532,7 +532,7 @@ class QueryScreen:
     def __batchKillAction (self):
         durationInput = self.__console.askForInput ('Sec')
         if durationInput:
-            condition = lambda line: len (line) >= 4 and line [4] > int (durationInput [0])
+            condition = lambda line: len (line) >= 3 and line [3] > int (durationInput [0])
             operations = self.__queryBlock.findLines (condition)
             for operation in operations:
                 operation.kill ()
