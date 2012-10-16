@@ -186,23 +186,20 @@ class Operation:
             print ('Only queries with namespace can be explained.')
 
 class ReplicaSetMember:
-    def __init__ (self, replicaSet, name, state, uptime, lag, ping):
+    def __init__ (self, replicaSet, name, state, uptime, lag, ping, server = None):
         self.__replicaSet = replicaSet
         self.__name = name
         self.__state = state.lower ()
         self.__uptime = uptime
         self.__lag = lag
         self.__ping = ping
+        self.__server = server
 
     def __str__ (self):
         return self.__name
 
-    def __eq__ (self, other):
-        return self.__name == other.__name
-
     def revise (self, otherMember):
         """Merge properties of the other replica set member with following rules."""
-        assert self.__state == otherMember.__state
         if otherMember.__uptime is not None:
             if self.__uptime is None or self.__uptime < otherMember.__uptime:
                 self.__uptime = otherMember.__uptime
@@ -211,11 +208,14 @@ class ReplicaSetMember:
         if otherMember.__ping is not None:
             if self.__ping is None or self.__ping < otherMember.__ping:
                 self.__ping = otherMember.__ping
+        if otherMember.__server is not None:
+            if self.__server is None:
+                self.__server = otherMember.__server
 
     def line (self):
         cells = []
+        cells.append (str (self.__server) if self.__server else self.__name)
         cells.append (str (self.__replicaSet))
-        cells.append (self.__name)
         cells.append (self.__state)
         cells.append (self.__uptime)
         cells.append (self.__lag)
@@ -230,9 +230,6 @@ class ReplicaSet:
 
     def __str__ (self):
         return self.__name
-
-    def __eq__ (self, other):
-        return self.__name == other.__name
 
     def masterState (self):
         return self.__state == 1
@@ -257,6 +254,7 @@ class Server:
     def __init__ (self, name, address, hideReplicationOperations = False):
         self.__name = name
         self.__address = address
+        self.__port = 27017
         self.__hideReplicationOperations = hideReplicationOperations
         self.__connection = pymongo.Connection (address, read_preference = self.__readPreference)
         self.__oldValues = {}
@@ -324,7 +322,10 @@ class Server:
             uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
             ping = member ['pingMs'] if 'pingMs' in member else None
             lag = replicaSetStatus ['date'] - member ['optimeDate']
-            replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, ping)
+            if member ['name'] == self.__address + ':' + str (self.__port):
+                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, ping, self)
+            else:
+                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, ping)
         return replicaSet
 
     def currentOperations (self):
@@ -469,7 +470,7 @@ class Configuration:
 
 class QueryScreen:
     __statusBlock = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
-    __replicaSetBlock = Block ('ReplicaSet', 'Member', 'State', 'Uptime', 'Lag', 'Ping')
+    __replicaSetBlock = Block ('Server', 'Member', 'State', 'Uptime', 'Lag', 'Ping')
     __queryBlock = Block ('Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query')
 
     def __init__ (self, console, servers, activeStatus, activeReplicaSet):
@@ -490,7 +491,7 @@ class QueryScreen:
         def add (replicaSet):
             """Merge same replica sets by revising the existent one."""
             for existentReplicaSet in replicaSets:
-                if existentReplicaSet == replicaSet:
+                if str (existentReplicaSet) == str (replicaSet):
                     return existentReplicaSet.revise (replicaSet)
             return replicaSets.append (replicaSet)
         for server in self.__servers:
