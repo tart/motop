@@ -114,6 +114,8 @@ class Operation:
     def sortOrder (self):
         return self.__duration if self.__duration is not None else -1
 
+    block = Block ('Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query')
+
     def line (self):
         cells = []
         cells.append (self.__server)
@@ -186,12 +188,13 @@ class Operation:
             print ('Only queries with namespace can be explained.')
 
 class ReplicaSetMember:
-    def __init__ (self, replicaSet, name, state, uptime, lag, ping, server = None):
+    def __init__ (self, replicaSet, name, state, uptime, lag, increment, ping, server = None):
         self.__replicaSet = replicaSet
         self.__name = name
         self.__state = state.lower ()
         self.__uptime = uptime
         self.__lag = lag
+        self.__increment = increment
         self.__ping = ping
         self.__server = server
 
@@ -205,12 +208,15 @@ class ReplicaSetMember:
                 self.__uptime = otherMember.__uptime
         if otherMember.__replicaSet.masterState ():
             self.__lag = otherMember.__lag
+        if self.__increment < otherMember.__increment:
+            self.__increment = otherMember.__increment
         if otherMember.__ping is not None:
             if self.__ping is None or self.__ping < otherMember.__ping:
                 self.__ping = otherMember.__ping
-        if otherMember.__server is not None:
-            if self.__server is None:
-                self.__server = otherMember.__server
+        if otherMember.__server is not None and self.__server is None:
+            self.__server = otherMember.__server
+
+    block = Block ('Server', 'Set', 'State', 'Uptime', 'Lag', 'Inc', 'Ping')
 
     def line (self):
         cells = []
@@ -219,6 +225,7 @@ class ReplicaSetMember:
         cells.append (self.__state)
         cells.append (self.__uptime)
         cells.append (self.__lag)
+        cells.append (self.__increment)
         cells.append (self.__ping)
         return cells
 
@@ -295,6 +302,8 @@ class Server:
             timespanSeconds = self.__timespan.seconds + (self.__timespan.microseconds / (10.0 ** 6))
             return Value ((value - oldValue) / timespanSeconds)
 
+    block = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
+
     def line (self):
         serverStatus = self.__getStatus ()
         currentConnection = Value (serverStatus ['connections'] ['current'])
@@ -322,10 +331,11 @@ class Server:
             uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
             ping = member ['pingMs'] if 'pingMs' in member else None
             lag = replicaSetStatus ['date'] - member ['optimeDate']
+            optime = member ['optime']
             if member ['name'] == self.__address + ':' + str (self.__port):
-                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, ping, self)
+                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping, self)
             else:
-                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, ping)
+                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping)
         return replicaSet
 
     def currentOperations (self):
@@ -469,10 +479,6 @@ class Configuration:
         return servers
 
 class QueryScreen:
-    __statusBlock = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
-    __replicaSetBlock = Block ('Server', 'Member', 'State', 'Uptime', 'Lag', 'Ping')
-    __queryBlock = Block ('Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query')
-
     def __init__ (self, console, servers, activeStatus, activeReplicaSet):
         self.__console = console
         self.__servers = servers
@@ -480,10 +486,10 @@ class QueryScreen:
         self.__activeReplicaSet = activeReplicaSet
         self.__blocks = []
         if any ([str (server) in activeStatus for server in servers]):
-            self.__blocks.append (self.__statusBlock)
+            self.__blocks.append (Server.block)
         if any ([str (server) in activeReplicaSet for server in servers]):
-            self.__blocks.append (self.__replicaSetBlock)
-        self.__blocks.append (self.__queryBlock)
+            self.__blocks.append (ReplicaSetMember.block)
+        self.__blocks.append (Operation.block)
 
     def __replicaSets (self):
         """Return unique replica sets of the servers."""
@@ -501,21 +507,21 @@ class QueryScreen:
                 except Server.ExecuteFailure:
                     self.__activeReplicaSet.remove (str (server))
                     if not any ([str (server) in self.__activeReplicaSet for server in self.__servers]):
-                        self.__blocks.remove (self.__replicaSetBlock)
+                        self.__blocks.remove (ReplicaSetMember.block)
         return replicaSets
 
     def __refresh (self):
-        self.__statusBlock.reset (server for server in self.__servers if str (server) in self.__activeStatus)
-        self.__replicaSetBlock.reset ([member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ()])
+        Server.block.reset (server for server in self.__servers if str (server) in self.__activeStatus)
+        ReplicaSetMember.block.reset ([member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ()])
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
-        self.__queryBlock.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
+        Operation.block.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
         self.__console.refresh (self.__blocks)
 
     def __askForOperation (self):
         operationInput = self.__console.askForInput ('Server', 'Opid')
         if len (operationInput) == 2:
             condition = lambda line: str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
-            operations = self.__queryBlock.findLines (condition)
+            operations = Operation.block.findLines (condition)
             if len (operations) == 1:
                 return operations [0]
 
@@ -534,7 +540,7 @@ class QueryScreen:
         durationInput = self.__console.askForInput ('Sec')
         if durationInput:
             condition = lambda line: len (line) >= 3 and line [3] > int (durationInput [0])
-            operations = self.__queryBlock.findLines (condition)
+            operations = Opeation.block.findLines (condition)
             for operation in operations:
                 operation.kill ()
 
