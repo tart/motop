@@ -540,7 +540,7 @@ class QueryScreen:
         durationInput = self.__console.askForInput ('Sec')
         if durationInput:
             condition = lambda line: len (line) >= 3 and line [3] > int (durationInput [0])
-            operations = Opeation.block.findLines (condition)
+            operations = Operation.block.findLines (condition)
             for operation in operations:
                 operation.kill ()
 
