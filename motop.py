@@ -329,6 +329,8 @@ class Server:
         return cells
 
     def replicaSet (self):
+        """Execure replSetGetStatus operation on the server. Filter arbiters. Calculate the lag. Add relation to the
+        member which is the server itself. Return the replica set."""
         replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
         replicaSet = ReplicaSet (replicaSetStatus ['set'], replicaSetStatus ['myState'])
         for member in replicaSetStatus ['members']:
