@@ -328,14 +328,15 @@ class Server:
         replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
         replicaSet = ReplicaSet (replicaSetStatus ['set'], replicaSetStatus ['myState'])
         for member in replicaSetStatus ['members']:
-            uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
-            ping = member ['pingMs'] if 'pingMs' in member else None
-            lag = replicaSetStatus ['date'] - member ['optimeDate']
-            optime = member ['optime']
-            if member ['name'] == self.__address + ':' + str (self.__port):
-                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping, self)
-            else:
-                replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping)
+            if member ['statusStr'] not in ['ARBITER']:
+                uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
+                ping = member ['pingMs'] if 'pingMs' in member else None
+                lag = replicaSetStatus ['date'] - member ['optimeDate']
+                optime = member ['optime']
+                if member ['name'] == self.__address + ':' + str (self.__port):
+                    replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping, self)
+                else:
+                    replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping)
         return replicaSet
 
     def currentOperations (self):
