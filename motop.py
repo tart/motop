@@ -257,13 +257,17 @@ class ReplicaSet:
             member.revise (other.findMember (str (member)))
 
 class Server:
-    __readPreference = pymongo.ReadPreference.SECONDARY
+    defaultPort = 27017
+    readPreference = pymongo.ReadPreference.SECONDARY
+
     def __init__ (self, name, address, hideReplicationOperations = False):
         self.__name = name
-        self.__address = address
-        self.__port = 27017
+        if ':' not in address:
+            self.__address = address + ':' + str (self.defaultPort)
+        else:
+            self.__address = address
         self.__hideReplicationOperations = hideReplicationOperations
-        self.__connection = pymongo.Connection (address, read_preference = self.__readPreference)
+        self.__connection = pymongo.Connection (address, read_preference = self.readPreference)
         self.__oldValues = {}
 
     def __str__ (self):
@@ -333,7 +337,7 @@ class Server:
                 ping = member ['pingMs'] if 'pingMs' in member else None
                 lag = replicaSetStatus ['date'] - member ['optimeDate']
                 optime = member ['optime']
-                if member ['name'] == self.__address + ':' + str (self.__port):
+                if member ['name'] == self.__address:
                     replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping, self)
                 else:
                     replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping)
