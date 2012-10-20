@@ -328,7 +328,7 @@ class Server:
         replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
         replicaSet = ReplicaSet (replicaSetStatus ['set'], replicaSetStatus ['myState'])
         for member in replicaSetStatus ['members']:
-            if member ['statusStr'] not in ['ARBITER']:
+            if 'statusStr' not in member or member ['statusStr'] not in ['ARBITER']:
                 uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
                 ping = member ['pingMs'] if 'pingMs' in member else None
                 lag = replicaSetStatus ['date'] - member ['optimeDate']
