@@ -289,6 +289,13 @@ class Operation:
         else:
             print ('Only queries with namespace can be explained.')
 
+class ExecuteFailure (Exception):
+    def __init__ (self, procedure):
+        self.__procedure = procedure
+
+    def __str__ (self):
+        return str (self.__procedure)
+
 class Server:
     defaultPort = 27017
     readPreference = pymongo.ReadPreference.SECONDARY
@@ -316,8 +323,6 @@ class Server:
     def __str__ (self):
         return self.__name
 
-    class ExecuteFailure (Exception): pass
-
     def __execute (self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
         tryCount = 1
@@ -327,9 +332,10 @@ class Server:
             except pymongo.errors.AutoReconnect:
                 tryCount += 1
                 if tryCount >= 10:
-                    raise self.ExecuteFailure ()
+                    raise ExecuteFailure (procedure)
+                sleep (0.1)
             except pymongo.errors.OperationFailure:
-                raise self.ExecuteFailure ()
+                raise ExecuteFailure (procedure)
 
     def __statusChangePerSecond (self, name, value):
         """Calculate the difference of the value in one second with the last time by using time difference calculated
@@ -475,7 +481,6 @@ class Console:
             if leftHeight <= 2:
                 break
             height = len (block) if len (block) < leftHeight else leftHeight
-            assert hasattr (block, 'printLines')
             block.printLines (height, self.__width)
             leftHeight -= height
             if leftHeight >= 2:
@@ -555,7 +560,7 @@ class QueryScreen:
             self.__blocks.append (ReplicaSetMember.block)
         self.__blocks.append (Operation.block)
 
-    def replicationInfos (self):
+    def __replicationInfos (self):
         replicationInfos = []
         for server in self.__servers:
             if str (server) in self.__activeReplicationInfo:
@@ -568,7 +573,7 @@ class QueryScreen:
                         self.__blocks.remove (ReplicationInfo.block)
         return replicationInfos
 
-    def __replicaSets (self):
+    def __replicaSetMembers (self):
         """Return unique replica sets of the servers."""
         replicaSets = []
         def add (replicaSet):
@@ -581,16 +586,16 @@ class QueryScreen:
             if str (server) in self.__activeReplicaSet:
                 try:
                     add (server.replicaSet ())
-                except Server.ExecuteFailure:
+                except ExecuteFailure:
                     self.__activeReplicaSet.remove (str (server))
                     if not self.__activeReplicaSet:
                         self.__blocks.remove (ReplicaSetMember.block)
-        return replicaSets
+        return [member for replicaSet in replicaSets for member in replicaSet.members ()]
 
     def __refresh (self):
         ServerStatus.block.reset (server.status () for server in self.__servers if str (server) in self.__activeStatus)
-        ReplicationInfo.block.reset (self.replicationInfos ())
-        ReplicaSetMember.block.reset (member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ())
+        ReplicationInfo.block.reset (self.__replicationInfos ())
+        ReplicaSetMember.block.reset (self.__replicaSetMembers ())
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
         Operation.block.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
         self.__console.refresh (self.__blocks)
