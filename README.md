@@ -29,6 +29,8 @@ address                     The address of the server
 
 status                      Paramer to disable status check for the server (default: on)
 
+replicationInfo             Paramer to show replication info line if exists for the server (default: on)
+
 replicaSet                  Paramer to disable replica set status check for the server (default: on)
 
 hideReplicationOperations   Paramer to hide constantly appeared replication operations on the masters and the slaves

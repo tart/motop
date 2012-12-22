@@ -187,6 +187,17 @@ class Operation:
         else:
             print ('Only queries with namespace can be explained.')
 
+class ReplicationInfo:
+    def __init__ (self, server, source, syncedTo):
+        self.__server = server
+        self.__source = source
+        self.__syncedTo = syncedTo
+
+    block = Block ('Server', 'Source', 'SyncedTo')
+
+    def line (self):
+        return self.__server, self.__source, self.__syncedTo.as_datetime ()
+
 class ReplicaSetMember:
     def __init__ (self, replicaSet, name, state, uptime, lag, increment, ping, server = None):
         self.__replicaSet = replicaSet
@@ -328,8 +339,14 @@ class Server:
         cells.append (str (networkInChange) + ' / ' + str (networkOutChange))
         return cells
 
+    def replicationInfo (self):
+        """Finds replication source from the local collection."""
+        sources = self.__execute (self.__connection.local.sources.find)
+        for source in sources:
+            return ReplicationInfo (self, source ['host'], source ['syncedTo'])
+
     def replicaSet (self):
-        """Execure replSetGetStatus operation on the server. Filter arbiters. Calculate the lag. Add relation to the
+        """Execute replSetGetStatus operation on the server. Filter arbiters. Calculate the lag. Add relation to the
         member which is the server itself. Return the replica set."""
         replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
         replicaSet = ReplicaSet (replicaSetStatus ['set'], replicaSetStatus ['myState'])
@@ -449,7 +466,7 @@ class Console:
 class Configuration:
     __filePath = os.path.splitext (__file__) [0] + '.conf'
     __defaultFilePath = os.path.splitext (__file__) [0] + '.default.conf'
-    __booleanVariables = {'status': 'on', 'replicaSet': 'on', 'hideReplicationOperations': 'off'}
+    __booleanVariables = {'status': 'on', 'replicationInfo': 'on', 'replicaSet': 'on', 'hideReplicationOperations': 'off'}
 
     def printInstructions (self):
         """Print the default configuration file if exists."""
@@ -482,21 +499,37 @@ class Configuration:
         servers = []
         for section in self.sections ():
             servers.append (Server (section, self.__configParser.get (section, 'address'),
-                                    self.booleanVariableTrueSections ('hideReplicationOperations')))
+                                    self.__configParser.getboolean (section, 'hideReplicationOperations')))
         return servers
 
 class QueryScreen:
-    def __init__ (self, console, servers, activeStatus, activeReplicaSet):
+    def __init__ (self, console, servers, activeStatus, activeReplicationInfo, activeReplicaSet):
         self.__console = console
         self.__servers = servers
         self.__activeStatus = activeStatus
+        self.__activeReplicationInfo = activeReplicationInfo
         self.__activeReplicaSet = activeReplicaSet
         self.__blocks = []
-        if any ([str (server) in activeStatus for server in servers]):
+        if activeStatus:
             self.__blocks.append (Server.block)
-        if any ([str (server) in activeReplicaSet for server in servers]):
+        if activeReplicationInfo:
+            self.__blocks.append (ReplicationInfo.block)
+        if activeReplicaSet:
             self.__blocks.append (ReplicaSetMember.block)
         self.__blocks.append (Operation.block)
+
+    def replicationInfos (self):
+        replicationInfos = []
+        for server in self.__servers:
+            if str (server) in self.__activeReplicationInfo:
+                replicationInfo = server.replicationInfo ()
+                if replicationInfo:
+                    replicationInfos.append (replicationInfo)
+                else:
+                    self.__activeReplicationInfo.remove (str (server))
+                    if not self.__activeReplicationInfo:
+                        self.__blocks.remove (ReplicationInfo.block)
+        return replicationInfos
 
     def __replicaSets (self):
         """Return unique replica sets of the servers."""
@@ -513,13 +546,14 @@ class QueryScreen:
                     add (server.replicaSet ())
                 except Server.ExecuteFailure:
                     self.__activeReplicaSet.remove (str (server))
-                    if not any ([str (server) in self.__activeReplicaSet for server in self.__servers]):
+                    if not self.__activeReplicaSet:
                         self.__blocks.remove (ReplicaSetMember.block)
         return replicaSets
 
     def __refresh (self):
         Server.block.reset (server for server in self.__servers if str (server) in self.__activeStatus)
-        ReplicaSetMember.block.reset ([member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ()])
+        ReplicationInfo.block.reset (self.replicationInfos ())
+        ReplicaSetMember.block.reset (member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ())
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
         Operation.block.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
         self.__console.refresh (self.__blocks)
@@ -573,6 +607,7 @@ if __name__ == '__main__':
         with ConsoleActivator () as console:
             queryScreen = QueryScreen (console, configuration.servers (),
                                        configuration.booleanVariableTrueSections ('status'),
+                                       configuration.booleanVariableTrueSections ('replicationInfo'),
                                        configuration.booleanVariableTrueSections ('replicaSet'))
             try:
                 queryScreen.action ()
