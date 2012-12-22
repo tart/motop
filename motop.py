@@ -251,19 +251,20 @@ class Operation:
 
     def examine (self):
         """Print the query parts."""
-        queryParts = self.__queryParts ()
-        for key, value in queryParts.items ():
-            print (key.title () + ':', end = ' ')
-            if isinstance (value, list):
-                print (', '.join ([pair [0] + ': ' + str (pair [1]) for pair in value]))
-            elif isinstance (value, dict):
-                print (json.dumps (value, default = json_util.default, indent = 4))
-            else:
-                print (value)
+        if self.__query:
+            queryParts = self.__queryParts ()
+            for key, value in queryParts.items ():
+                print (key.title () + ':', end = ' ')
+                if isinstance (value, list):
+                    print (', '.join ([pair [0] + ': ' + str (pair [1]) for pair in value]))
+                elif isinstance (value, dict):
+                    print (json.dumps (value, default = json_util.default, indent = 4))
+                else:
+                    print (value)
 
     def explain (self):
         """Print the output of the explain command executed on the server."""
-        if self.__namespace:
+        if self.__namespace and self.__query:
             databaseName, collectionName = self.__namespace.split ('.', 1)
             queryParts = self.__queryParts ()
             assert 'explain' not in queryParts
