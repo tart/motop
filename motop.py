@@ -102,6 +102,105 @@ class Block:
         """Return the printables from self.__lineClass saved with reset."""
         return [self.__lineClass (*line) for line in self.__lines if condition (line)]
 
+class ServerStatus:
+    def __init__ (self, server, **status):
+        self.__server = server
+        self.__status = status
+
+    block = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
+
+    def line (self):
+        cells = []
+        cells.append (str (self.__server))
+        cells.append (Value (self.__status ['qPS']))
+        cells.append (Value (self.__status ['activeClients']))
+        cells.append (Value (self.__status ['currentQueue']))
+        cells.append (Value (self.__status ['flushes']))
+        cells.append ('{0} / {1}'.format (Value (self.__status ['currentConn']), Value (self.__status ['totalConn'])))
+        cells.append ('{0} / {1}'.format (Value (self.__status ['residentMem']), Value (self.__status ['mappedMem'])))
+        cells.append ('{0} / {1}'.format (Value (self.__status ['bytesIn']), Value (self.__status ['bytesOut'])))
+        return cells
+
+class ReplicationInfo:
+    def __init__ (self, server, source, syncedTo):
+        self.__server = server
+        self.__source = source
+        self.__syncedTo = syncedTo
+
+    block = Block ('Server', 'Source', 'SyncedTo')
+
+    def line (self):
+        return self.__server, self.__source, self.__syncedTo.as_datetime ()
+
+class ReplicaSetMember:
+    def __init__ (self, replicaSet, name, state, uptime, lag, increment, ping, server = None):
+        self.__replicaSet = replicaSet
+        self.__name = name
+        self.__state = state.lower ()
+        self.__uptime = uptime
+        self.__lag = lag
+        self.__increment = increment
+        self.__ping = ping
+        self.__server = server
+
+    def __str__ (self):
+        return self.__name
+
+    def revise (self, otherMember):
+        """Merge properties of the other replica set member with following rules."""
+        if otherMember.__uptime is not None:
+            if self.__uptime is None or self.__uptime < otherMember.__uptime:
+                self.__uptime = otherMember.__uptime
+        if otherMember.__replicaSet.masterState ():
+            self.__lag = otherMember.__lag
+        if self.__increment < otherMember.__increment:
+            self.__increment = otherMember.__increment
+        if otherMember.__ping is not None:
+            if self.__ping is None or self.__ping < otherMember.__ping:
+                self.__ping = otherMember.__ping
+        if otherMember.__server is not None and self.__server is None:
+            self.__server = otherMember.__server
+
+    block = Block ('Server', 'Set', 'State', 'Uptime', 'Lag', 'Inc', 'Ping')
+
+    def line (self):
+        cells = []
+        cells.append (str (self.__server) if self.__server else self.__name)
+        cells.append (str (self.__replicaSet))
+        cells.append (self.__state)
+        cells.append (self.__uptime)
+        cells.append (self.__lag)
+        cells.append (self.__increment)
+        cells.append (self.__ping)
+        return cells
+
+class ReplicaSet:
+    def __init__ (self, name, state):
+        self.__name = name
+        self.__state = state
+        self.__members = []
+
+    def __str__ (self):
+        return self.__name
+
+    def masterState (self):
+        return self.__state == 1
+
+    def addMember (self, *args):
+        self.__members.append (ReplicaSetMember (self, *args))
+
+    def members (self):
+        return self.__members
+
+    def findMember (self, name):
+        for member in self.__members:
+            if str (member) == name:
+                return member
+
+    def revise (self, other):
+        for member in self.__members:
+            member.revise (other.findMember (str (member)))
+
 class Operation:
     def __init__ (self, server, opid, state, duration = None, namespace = None, query = None):
         self.__server = server
@@ -187,86 +286,6 @@ class Operation:
         else:
             print ('Only queries with namespace can be explained.')
 
-class ReplicationInfo:
-    def __init__ (self, server, source, syncedTo):
-        self.__server = server
-        self.__source = source
-        self.__syncedTo = syncedTo
-
-    block = Block ('Server', 'Source', 'SyncedTo')
-
-    def line (self):
-        return self.__server, self.__source, self.__syncedTo.as_datetime ()
-
-class ReplicaSetMember:
-    def __init__ (self, replicaSet, name, state, uptime, lag, increment, ping, server = None):
-        self.__replicaSet = replicaSet
-        self.__name = name
-        self.__state = state.lower ()
-        self.__uptime = uptime
-        self.__lag = lag
-        self.__increment = increment
-        self.__ping = ping
-        self.__server = server
-
-    def __str__ (self):
-        return self.__name
-
-    def revise (self, otherMember):
-        """Merge properties of the other replica set member with following rules."""
-        if otherMember.__uptime is not None:
-            if self.__uptime is None or self.__uptime < otherMember.__uptime:
-                self.__uptime = otherMember.__uptime
-        if otherMember.__replicaSet.masterState ():
-            self.__lag = otherMember.__lag
-        if self.__increment < otherMember.__increment:
-            self.__increment = otherMember.__increment
-        if otherMember.__ping is not None:
-            if self.__ping is None or self.__ping < otherMember.__ping:
-                self.__ping = otherMember.__ping
-        if otherMember.__server is not None and self.__server is None:
-            self.__server = otherMember.__server
-
-    block = Block ('Server', 'Set', 'State', 'Uptime', 'Lag', 'Inc', 'Ping')
-
-    def line (self):
-        cells = []
-        cells.append (str (self.__server) if self.__server else self.__name)
-        cells.append (str (self.__replicaSet))
-        cells.append (self.__state)
-        cells.append (self.__uptime)
-        cells.append (self.__lag)
-        cells.append (self.__increment)
-        cells.append (self.__ping)
-        return cells
-
-class ReplicaSet:
-    def __init__ (self, name, state):
-        self.__name = name
-        self.__state = state
-        self.__members = []
-
-    def __str__ (self):
-        return self.__name
-
-    def masterState (self):
-        return self.__state == 1
-
-    def addMember (self, *args):
-        self.__members.append (ReplicaSetMember (self, *args))
-
-    def members (self):
-        return self.__members
-
-    def findMember (self, name):
-        for member in self.__members:
-            if str (member) == name:
-                return member
-
-    def revise (self, other):
-        for member in self.__members:
-            member.revise (other.findMember (str (member)))
-
 class Server:
     defaultPort = 27017
     readPreference = pymongo.ReadPreference.SECONDARY
@@ -299,15 +318,6 @@ class Server:
             except pymongo.errors.OperationFailure:
                 raise self.ExecuteFailure ()
 
-    def __getStatus (self):
-        """Get serverStatus from MongoDB, calculate time difference with the last time."""
-        status = self.__execute (self.__connection.admin.command, 'serverStatus')
-        oldCheckTime = self.__oldValues ['checkTime'] if 'checkTime' in self.__oldValues else None
-        self.__oldValues ['checkTime'] = datetime.now ()
-        if oldCheckTime:
-            self.__timespan = self.__oldValues ['checkTime'] - oldCheckTime
-        return status
-
     def __statusChangePerSecond (self, name, value):
         """Calculate the difference of the value in one second with the last time by using time difference calculated
         on __getStatus."""
@@ -315,32 +325,32 @@ class Server:
         self.__oldValues [name] = value
         if oldValue:
             timespanSeconds = self.__timespan.seconds + (self.__timespan.microseconds / (10.0 ** 6))
-            return Value ((value - oldValue) / timespanSeconds)
+            return (value - oldValue) / timespanSeconds
+        return 0
 
-    block = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
-
-    def line (self):
-        serverStatus = self.__getStatus ()
-        currentConnection = Value (serverStatus ['connections'] ['current'])
-        totalConnection = Value (serverStatus ['connections'] ['available'] + serverStatus ['connections'] ['current'])
-        residentMem = Value (serverStatus ['mem'] ['resident'] * (10 ** 6))
-        mappedMem = Value (serverStatus ['mem'] ['mapped'] * (10 ** 6))
-        opcounters = serverStatus ['opcounters']
-        networkInChange = self.__statusChangePerSecond ('networkIn', serverStatus ['network'] ['bytesIn'])
-        networkOutChange = self.__statusChangePerSecond ('networkOut', serverStatus ['network'] ['bytesOut'])
-        cells = []
-        cells.append (str (self))
-        cells.append (self.__statusChangePerSecond ('operation', sum (opcounters.values ())))
-        cells.append (Value (serverStatus ['globalLock'] ['activeClients'] ['total']))
-        cells.append (Value (serverStatus ['globalLock'] ['currentQueue'] ['total']))
-        cells.append (self.__statusChangePerSecond ('flush', serverStatus ['backgroundFlushing'] ['flushes']))
-        cells.append (str (currentConnection) + ' / ' + str (totalConnection))
-        cells.append (str (residentMem) + ' / ' + str (mappedMem))
-        cells.append (str (networkInChange) + ' / ' + str (networkOutChange))
-        return cells
+    def status (self):
+        """Get serverStatus from MongoDB, calculate time difference with the last time. Return ServerStatus object."""
+        status = self.__execute (self.__connection.admin.command, 'serverStatus')
+        oldCheckTime = self.__oldValues ['checkTime'] if 'checkTime' in self.__oldValues else None
+        self.__oldValues ['checkTime'] = datetime.now ()
+        if oldCheckTime:
+            self.__timespan = self.__oldValues ['checkTime'] - oldCheckTime
+        values = {}
+        opcounters = status ['opcounters']
+        values ['qPS'] = self.__statusChangePerSecond ('qPS', sum (opcounters.values ()))
+        values ['activeClients'] = status ['globalLock'] ['activeClients'] ['total']
+        values ['currentQueue'] = status ['globalLock'] ['currentQueue'] ['total']
+        values ['flushes'] = self.__statusChangePerSecond ('flushes', status ['backgroundFlushing'] ['flushes'])
+        values ['currentConn'] = status ['connections'] ['current']
+        values ['totalConn'] = status ['connections'] ['available'] + status ['connections'] ['current']
+        values ['residentMem'] = status ['mem'] ['resident'] * (10 ** 6)
+        values ['mappedMem'] = status ['mem'] ['mapped'] * (10 ** 6)
+        values ['bytesIn'] = self.__statusChangePerSecond ('bytesIn', status ['network'] ['bytesIn'])
+        values ['bytesOut'] = self.__statusChangePerSecond ('bytesOut', status ['network'] ['bytesOut'])
+        return ServerStatus (self, **values)
 
     def replicationInfo (self):
-        """Finds replication source from the local collection."""
+        """Find replication source from the local collection."""
         sources = self.__execute (self.__connection.local.sources.find)
         for source in sources:
             return ReplicationInfo (self, source ['host'], source ['syncedTo'])
@@ -424,7 +434,7 @@ class Console:
             self.__height, self.__width = 20, 80
 
     def checkButton (self, waitTime = None):
-        """Check one character input. Waits for approximately waitTime parameter as seconds. Waits for input if no
+        """Check one character input. Waits for approximately waitTime parameter as seconds. Wait for input if no
         parameter given."""
         if waitTime:
             while waitTime > 0:
@@ -511,7 +521,7 @@ class QueryScreen:
         self.__activeReplicaSet = activeReplicaSet
         self.__blocks = []
         if activeStatus:
-            self.__blocks.append (Server.block)
+            self.__blocks.append (ServerStatus.block)
         if activeReplicationInfo:
             self.__blocks.append (ReplicationInfo.block)
         if activeReplicaSet:
@@ -551,7 +561,7 @@ class QueryScreen:
         return replicaSets
 
     def __refresh (self):
-        Server.block.reset (server for server in self.__servers if str (server) in self.__activeStatus)
+        ServerStatus.block.reset (server.status () for server in self.__servers if str (server) in self.__activeStatus)
         ReplicationInfo.block.reset (self.replicationInfos ())
         ReplicaSetMember.block.reset (member for replicaSet in self.__replicaSets () if str for member in replicaSet.members ())
         operations = [operation for server in self.__servers for operation in server.currentOperations ()]
