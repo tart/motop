@@ -291,14 +291,16 @@ class Server:
     defaultPort = 27017
     readPreference = pymongo.ReadPreference.SECONDARY
 
-    def __init__ (self, name, address, hideReplicationOperations = False):
+    def __init__ (self, name, address, m_login, m_password, hideReplicationOperations = False):
         self.__name = name
         if ':' not in address:
             self.__address = address + ':' + str (self.defaultPort)
         else:
             self.__address = address
         self.__hideReplicationOperations = hideReplicationOperations
-        self.__connection = pymongo.Connection (address, read_preference = self.readPreference)
+        self.__connection = pymongo.mongo_client.MongoClient(address, read_preference = self.readPreference)
+        if m_login != None and m_password != None:
+            self.__connection["admin"].authenticate(m_login, m_password)
         self.__oldValues = {}
 
     def __str__ (self):
@@ -509,8 +511,14 @@ class Configuration:
     def servers (self):
         servers = []
         for section in self.sections ():
-            servers.append (Server (section, self.__configParser.get (section, 'address'),
-                                    self.__configParser.getboolean (section, 'hideReplicationOperations')))
+            address = self.__configParser.get (section, 'address')
+            try:
+                username = self.__configParser.get(section, 'username')
+                password = self.__configParser.get(section, 'password')
+            except:
+                username = None
+                password = None
+            servers.append (Server (section, address, username, password, self.__configParser.getboolean (section, 'hideReplicationOperations')))
         return servers
 
 class QueryScreen:
