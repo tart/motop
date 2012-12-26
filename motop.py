@@ -298,7 +298,10 @@ class Server:
         else:
             self.__address = address
         self.__hideReplicationOperations = hideReplicationOperations
-        self.__connection = pymongo.mongo_client.MongoClient(address, read_preference = self.readPreference)
+        if pymongo.version_tuple > (2.3):
+            self.__connection = pymongo.mongo_client.MongoClient(address, read_preference = self.readPreference)
+        else:
+            self.__connection = pymongo.Connection (address, read_preference = self.readPreference)
         if m_login != None and m_password != None:
             self.__connection["admin"].authenticate(m_login, m_password)
         self.__oldValues = {}
