@@ -302,7 +302,7 @@ class Server:
             self.__connection = pymongo.mongo_client.MongoClient(address, read_preference = self.readPreference)
         else:
             self.__connection = pymongo.Connection (address, read_preference = self.readPreference)
-        if m_login != None and m_password != None:
+        if m_login is not None and m_password is not None:
             self.__connection["admin"].authenticate(m_login, m_password)
         self.__oldValues = {}
 
