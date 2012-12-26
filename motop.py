@@ -142,6 +142,8 @@ class ReplicaSetMember:
         self.__increment = increment
         self.__ping = ping
         self.__server = server
+        self.__mongo_password = None
+        self.__mongo_username = None
 
     def __str__ (self):
         return self.__name
@@ -303,7 +305,12 @@ class Server:
         else:
             self.__connection = pymongo.Connection (address, read_preference = self.readPreference)
         if m_login is not None and m_password is not None:
-            self.__connection["admin"].authenticate(m_login, m_password)
+            self.__mongo_username = m_login
+            self.__mongo_password = m_password
+            self.__connection["admin"].authenticate(self.__mongo_username, self.__mongo_password)
+        else:
+            self.__mongo_username = None
+            self.__mongo_password = None
         self.__oldValues = {}
 
     def __str__ (self):
@@ -399,7 +406,15 @@ class Server:
     def killOperation (self, opid):
         """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
         pymongo."""
-        os.system ('echo "db.killOp (' + str (opid) + ')" | mongo --host ' + self.__address)
+        if self.__mongo_username is not None and self.__mongo_password is not None:
+            e_username = "-u %s" % (self.__mongo_username)
+            e_password = "-p %s" % (self.__mongo_password)
+        else:
+            e_username = ""
+            e_password = ""
+        execute_string = "echo 'db.killOp (%s)' | mongo %s/admin %s %s" % (str(opid), self.__address, e_username, e_password)
+        #print(execute_string)
+        os.system(execute_string)
 
 class ConsoleActivator:
     """Class to use with "with" statement to hide pressed buttons on the console."""
