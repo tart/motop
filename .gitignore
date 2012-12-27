@@ -1,4 +1,6 @@
+# Temporary files
 *.py[co]
+*.swp
 
 # Packages
 *.egg
@@ -20,14 +22,14 @@ pip-log.txt
 .coverage
 .tox
 
-#Translations
+# Translations
 *.mo
 
-#Editors
+# Editors settings
 .project
 .pydevproject
 .settings
 .idea
 
-#Configuration
+# Configuration file
 motop.conf
