@@ -300,25 +300,23 @@ class Server:
     defaultPort = 27017
     readPreference = pymongo.ReadPreference.SECONDARY
 
-    def __init__ (self, name, address, m_login, m_password, hideReplicationOperations = False):
+    def __init__ (self, name, address, username = None, password = None, hideReplicationOperations = False):
         self.__name = name
         if ':' not in address:
             self.__address = address + ':' + str (self.defaultPort)
         else:
             self.__address = address
+        self.__username = username
+        self.__password = password
         self.__hideReplicationOperations = hideReplicationOperations
-        if pymongo.version_tuple > (2.3):
-            self.__connection = pymongo.mongo_client.MongoClient(address, read_preference = self.readPreference)
+        self.__oldValues = {}
+
+        if pymongo.version_tuple >= (2, 4):
+            self.__connection = pymongo.MongoClient (address, read_preference = self.readPreference)
         else:
             self.__connection = pymongo.Connection (address, read_preference = self.readPreference)
-        if m_login is not None and m_password is not None:
-            self.__mongo_username = m_login
-            self.__mongo_password = m_password
-            self.__connection["admin"].authenticate(self.__mongo_username, self.__mongo_password)
-        else:
-            self.__mongo_username = None
-            self.__mongo_password = None
-        self.__oldValues = {}
+        if username and password:
+            self.__connection.admin.authenticate (self.__mongo_username, self.__mongo_password)
 
     def __str__ (self):
         return self.__name
@@ -412,15 +410,13 @@ class Server:
     def killOperation (self, opid):
         """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
         pymongo."""
-        if self.__mongo_username is not None and self.__mongo_password is not None:
-            e_username = "-u %s" % (self.__mongo_username)
-            e_password = "-p %s" % (self.__mongo_password)
-        else:
-            e_username = ""
-            e_password = ""
-        execute_string = "echo 'db.killOp (%s)' | mongo %s/admin %s %s" % (str(opid), self.__address, e_username, e_password)
-        #print(execute_string)
-        os.system(execute_string)
+        command = "echo 'db.killOp ({0})' | mongo".format (str (opid))
+        command += ' --host ' + self.__address
+        if self.__username:
+            command += ' --username ' + self.__username
+        if self.__password:
+            command += ' --password ' + self.__password
+        os.system (command)
 
 class ConsoleActivator:
     """Class to use with "with" statement to hide pressed buttons on the console."""
@@ -502,6 +498,7 @@ class Console:
 class Configuration:
     __filePath = os.path.splitext (__file__) [0] + '.conf'
     __defaultFilePath = os.path.splitext (__file__) [0] + '.default.conf'
+    __optionalVariables = ['username', 'password']
     __booleanVariables = {'status': 'on', 'replicationInfo': 'on', 'replicaSet': 'on', 'hideReplicationOperations': 'off'}
 
     def printInstructions (self):
@@ -516,11 +513,13 @@ class Configuration:
     def __init__ (self):
         """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
         import the same class for Python 3 compatibility."""
+        defaults = dict ((variable, None) for variable in self.__optionalVariables)
+        defaults.update (self.__booleanVariables)
         try:
             from ConfigParser import SafeConfigParser
         except ImportError:
             from configparser import SafeConfigParser
-        self.__configParser = SafeConfigParser (self.__booleanVariables)
+        self.__configParser = SafeConfigParser (defaults)
         self.__configParser.read (self.__filePath)
 
     def sections (self):
@@ -535,13 +534,10 @@ class Configuration:
         servers = []
         for section in self.sections ():
             address = self.__configParser.get (section, 'address')
-            try:
-                username = self.__configParser.get(section, 'username')
-                password = self.__configParser.get(section, 'password')
-            except:
-                username = None
-                password = None
-            servers.append (Server (section, address, username, password, self.__configParser.getboolean (section, 'hideReplicationOperations')))
+            username = self.__configParser.get (section, 'username')
+            password = self.__configParser.get (section, 'password')
+            hideReplicationOperations = self.__configParser.getboolean (section, 'hideReplicationOperations')
+            servers.append (Server (section, address, username, password, hideReplicationOperations))
         return servers
 
 class QueryScreen:

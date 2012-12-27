@@ -27,6 +27,10 @@ section can be used for all servers.
 
 address                     The address of the server
 
+username                    The username to authenticate to the server
+
+password                    The password to authenticate to the server
+
 status                      Paramer to disable status check for the server (default: on)
 
 replicationInfo             Paramer to show replication info line if exists for the server (default: on)
