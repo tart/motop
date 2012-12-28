@@ -316,7 +316,7 @@ class Server:
         else:
             self.__connection = pymongo.Connection (address, read_preference = self.readPreference)
         if username and password:
-            self.__connection.admin.authenticate (self.__mongo_username, self.__mongo_password)
+            self.__connection.admin.authenticate (self.__username, self.__password)
 
     def __str__ (self):
         return self.__name
