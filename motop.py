@@ -411,7 +411,7 @@ class Server:
         """Kill operation using the "mongo" executable on the shell. That is because I could not make it with
         pymongo."""
         command = "echo 'db.killOp ({0})' | mongo".format (str (opid))
-        command += ' --host ' + self.__address
+        command += ' ' + self.__address + '/admin'
         if self.__username:
             command += ' --username ' + self.__username
         if self.__password:
