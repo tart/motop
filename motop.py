@@ -68,7 +68,7 @@ class Block:
             self.__lines.append (printable.line ())
 
     def __len__ (self):
-        """Return line count plus one for header, one for blank line at buttom."""
+        """Return line count plus one for header, one for blank line at bottom."""
         return len (self.__lines) + 2
 
     def __printLine (self, line, width, bold = False):
@@ -300,23 +300,23 @@ class Server:
     defaultPort = 27017
     readPreference = pymongo.ReadPreference.SECONDARY
 
-    def __init__ (self, name, address, username = None, password = None, hideReplicationOperations = False):
-        self.__name = name
-        if ':' not in address:
-            self.__address = address + ':' + str (self.defaultPort)
+    def __connect (self):
+        if pymongo.version_tuple >= (2, 4):
+            self.__connection = pymongo.MongoClient (self.__address, read_preference = self.readPreference)
         else:
-            self.__address = address
+            self.__connection = pymongo.Connection (self.__address, read_preference = self.readPreference)
+        if self.__username and self.__password:
+            self.__connection.admin.authenticate (self.__username, self.__password)
+
+    def __init__ (self, name, address = None, username = None, password = None, hideReplicationOperations = False):
+        self.__name = name
+        self.__address = address or name
+        if ':' not in self.__address:
+            self.__address += ':' + str (self.defaultPort)
         self.__username = username
         self.__password = password
-        self.__hideReplicationOperations = hideReplicationOperations
         self.__oldValues = {}
-
-        if pymongo.version_tuple >= (2, 4):
-            self.__connection = pymongo.MongoClient (address, read_preference = self.readPreference)
-        else:
-            self.__connection = pymongo.Connection (address, read_preference = self.readPreference)
-        if username and password:
-            self.__connection.admin.authenticate (self.__username, self.__password)
+        self.__connect ()
 
     def __str__ (self):
         return self.__name
@@ -389,16 +389,17 @@ class Server:
                     replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping)
         return replicaSet
 
-    def currentOperations (self):
+    def currentOperations (self, hideReplicationOperations = False):
         """Execute currentOp operation on the server. Filter and yield returning operations."""
         for op in self.__execute (self.__connection.admin.current_op) ['inprog']:
-            if self.__hideReplicationOperations and op ['op'] == 'getmore' and 'local.oplog.' in op ['ns']:
-                """Condition to find replication operation on the master."""
-                continue
-            if self.__hideReplicationOperations and op ['op'] and op ['ns'] in ('', 'local.sources'):
-                """Condition to find replication operation on the slave. Do not look for more replication
-                operations if one found."""
-                continue
+            if hideReplicationOperations:
+                if op ['op'] == 'getmore' and 'local.oplog.' in op ['ns']:
+                    """Condition to find replication operation on the master."""
+                    continue
+                if op ['op'] and op ['ns'] in ('', 'local.sources'):
+                    """Condition to find replication operation on the slave. Do not look for more replication
+                    operations if one found."""
+                    continue
             duration = op ['secs_running'] if 'secs_running' in op else None
             yield Operation (self, op ['opid'], op ['op'], duration, op ['ns'], op ['query'] or None)
 
@@ -473,8 +474,8 @@ class Console:
         os.system ('clear')
         leftHeight = self.__height
         for block in blocks:
-            """Do not show the block if there are not left lines for header and a row"""
             if leftHeight <= 2:
+                """Do not show the block if there are not left lines for header and a row."""
                 break
             height = len (block) if len (block) < leftHeight else leftHeight
             block.printLines (height, self.__width)
@@ -496,82 +497,63 @@ class Console:
         return values
 
 class Configuration:
-    __filePath = os.path.splitext (__file__) [0] + '.conf'
-    __defaultFilePath = os.path.splitext (__file__) [0] + '.default.conf'
-    __optionalVariables = ['username', 'password']
-    __booleanVariables = {'status': 'on', 'replicationInfo': 'on', 'replicaSet': 'on', 'hideReplicationOperations': 'off'}
+    defaultFile = os.path.splitext (__file__) [0] + '.conf'
+    optionalVariables = ['username', 'password']
+    choices = ['status', 'replicationInfo', 'replicaSet', 'replicationOperations']
 
-    def printInstructions (self):
-        """Print the default configuration file if exists."""
-        print ('Please create a configuration file: ' + self.__filePath)
-        try:
-            with open (self.__defaultFilePath) as defaultConfigurationFile:
-                print ('Like this:')
-                print (defaultConfigurationFile.read ())
-        except IOError: pass
-
-    def __init__ (self):
+    def __init__ (self, filePath):
         """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
         import the same class for Python 3 compatibility."""
-        defaults = dict ((variable, None) for variable in self.__optionalVariables)
-        defaults.update (self.__booleanVariables)
+        defaults = [(variable, None) for variable in self.optionalVariables]
+        defaults += [(choice, 'on') for choice in self.choices]
         try:
             from ConfigParser import SafeConfigParser
         except ImportError:
             from configparser import SafeConfigParser
-        self.__configParser = SafeConfigParser (defaults)
-        self.__configParser.read (self.__filePath)
+        self.__parser = SafeConfigParser (dict (defaults))
+        self.__parser.read (filePath)
 
     def sections (self):
-        if self.__configParser:
-            return self.__configParser.sections ()
+        if self.__parser:
+            return self.__parser.sections ()
 
-    def booleanVariableTrueSections (self, variable):
-        assert variable in self.__booleanVariables
-        return [section for section in self.sections () if self.__configParser.getboolean (section, variable)]
+    def chosenSections (self):
+        for choice in self.choices:
+            yield choice, [section for section in self.sections () if self.__parser.getboolean (section, choice)]
 
     def servers (self):
-        servers = []
         for section in self.sections ():
-            address = self.__configParser.get (section, 'address')
-            username = self.__configParser.get (section, 'username')
-            password = self.__configParser.get (section, 'password')
-            hideReplicationOperations = self.__configParser.getboolean (section, 'hideReplicationOperations')
-            servers.append (Server (section, address, username, password, hideReplicationOperations))
-        return servers
+            address = self.__parser.get (section, 'address')
+            username = self.__parser.get (section, 'username')
+            password = self.__parser.get (section, 'password')
+            yield Server (section, address, username, password)
 
 class QueryScreen:
-    def __init__ (self, console, servers, activeStatus, activeReplicationInfo, activeReplicaSet):
+    def __init__ (self, console, servers, **chosenSections):
         self.__console = console
         self.__servers = servers
-        self.__activeStatus = activeStatus
-        self.__activeReplicationInfo = activeReplicationInfo
-        self.__activeReplicaSet = activeReplicaSet
-        self.__blocks = []
-        if activeStatus:
-            self.__blocks.append (ServerStatus.block)
-        if activeReplicationInfo:
-            self.__blocks.append (ReplicationInfo.block)
-        if activeReplicaSet:
-            self.__blocks.append (ReplicaSetMember.block)
-        self.__blocks.append (Operation.block)
+        self.__chosenSections = chosenSections
 
+    def __status (self):
+        chosenSections = self.__chosenSections ['status']
+        return (server.status () for server in self.__servers if str (server) in chosenSections)
+ 
     def __replicationInfos (self):
         replicationInfos = []
+        chosenSections = self.__chosenSections ['replicationInfo']
         for server in self.__servers:
-            if str (server) in self.__activeReplicationInfo:
+            if str (server) in chosenSections:
                 replicationInfo = server.replicationInfo ()
                 if replicationInfo:
                     replicationInfos.append (replicationInfo)
                 else:
-                    self.__activeReplicationInfo.remove (str (server))
-                    if not self.__activeReplicationInfo:
-                        self.__blocks.remove (ReplicationInfo.block)
+                    chosenSections.remove (str (server))
         return replicationInfos
 
     def __replicaSetMembers (self):
         """Return unique replica sets of the servers."""
         replicaSets = []
+        chosenSections = self.__chosenSections ['replicaSet']
         def add (replicaSet):
             """Merge same replica sets by revising the existent one."""
             for existentReplicaSet in replicaSets:
@@ -579,22 +561,33 @@ class QueryScreen:
                     return existentReplicaSet.revise (replicaSet)
             return replicaSets.append (replicaSet)
         for server in self.__servers:
-            if str (server) in self.__activeReplicaSet:
+            if str (server) in chosenSections:
                 try:
                     add (server.replicaSet ())
                 except ExecuteFailure:
-                    self.__activeReplicaSet.remove (str (server))
-                    if not self.__activeReplicaSet:
-                        self.__blocks.remove (ReplicaSetMember.block)
+                    chosenSections.remove (str (server))
         return [member for replicaSet in replicaSets for member in replicaSet.members ()]
 
+    def __operations (self):
+        operations = []
+        for server in self.__servers:
+            hideReplicationOperations = str (server) not in self.__chosenSections ['replicationOperations']
+            for operation in server.currentOperations (hideReplicationOperations):
+                operations.append (operation)
+        return sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True)
+
     def __refresh (self):
-        ServerStatus.block.reset (server.status () for server in self.__servers if str (server) in self.__activeStatus)
-        ReplicationInfo.block.reset (self.__replicationInfos ())
-        ReplicaSetMember.block.reset (self.__replicaSetMembers ())
-        operations = [operation for server in self.__servers for operation in server.currentOperations ()]
-        Operation.block.reset (sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True))
-        self.__console.refresh (self.__blocks)
+        blocks = [ServerStatus.block]
+        ServerStatus.block.reset (self.__status ())
+        if self.__chosenSections ['replicationInfo']:
+            blocks.append (ReplicationInfo.block)
+            ReplicationInfo.block.reset (self.__replicationInfos ())
+        if self.__chosenSections ['replicaSet']:
+            blocks.append (ReplicaSetMember.block)
+            ReplicaSetMember.block.reset (self.__replicaSetMembers ())
+        blocks.append (Operation.block)
+        Operation.block.reset (self.__operations ())
+        self.__console.refresh (blocks)
 
     def __askForOperation (self):
         operationInput = self.__console.askForInput ('Server', 'Opid')
@@ -638,17 +631,42 @@ class QueryScreen:
             if button == 'K':
                 self.__batchKillAction ()
 
-if __name__ == '__main__':
-    """Run the main program."""
-    configuration = Configuration ()
-    if configuration.sections ():
+class Motop:
+    """Realtime monitoring tool for several MongoDB servers. Shows current operations ordered by durations every
+    second."""
+    version = 1.0
+    versionName = 'Motop ' + str (version)
+
+    def parseArguments (self):
+        """Create ArgumentParser instance. Return parsed arguments."""
+        from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+        parser = ArgumentParser (formatter_class = ArgumentDefaultsHelpFormatter, description = self.__doc__)
+        parser.add_argument ('addresses', metavar = 'address', nargs = '*', default = 'localhost:27017')
+        parser.add_argument ('-c', '--conf', dest = 'conf', default = Configuration.defaultFile)
+        parser.add_argument ('-V', '--version', action = 'version', version = self.versionName)
+        return parser.parse_args ()
+
+    def __init__ (self):
+        """Parse arguments and the configuration file. Activate console. Get servers from the configuration file or
+        from arguments. Show the query screen."""
+        arguments = self.parseArguments ()
+        configuration = Configuration (arguments.conf)
         with ConsoleActivator () as console:
-            queryScreen = QueryScreen (console, configuration.servers (),
-                                       configuration.booleanVariableTrueSections ('status'),
-                                       configuration.booleanVariableTrueSections ('replicationInfo'),
-                                       configuration.booleanVariableTrueSections ('replicaSet'))
+            servers = []
+            if configuration.sections ():
+                for server in configuration.servers ():
+                    servers.append (server)
+                chosenSections = dict (configuration.chosenSections ())
+            else:
+                for address in arguments.addresses:
+                    servers.append (Server (address))
+                chosenSections = {choice: list (arguments.addresses) for choice in configuration.choices}
+            queryScreen = QueryScreen (console, servers, **chosenSections)
             try:
                 queryScreen.action ()
             except KeyboardInterrupt: pass
-    else:
-        configuration.printInstructions ()
+
+if __name__ == '__main__':
+    """Run the main program."""
+    Motop ()
+

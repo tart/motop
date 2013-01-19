@@ -25,20 +25,20 @@ K   Kill operations older than given seconds using "mongo" executable
 Configuration file can be created by copying motop.default.conf to motop.conf. Section are used for servers. DEFAULT
 section can be used for all servers.
 
-address                     The address of the server
+address                 The address of the server
 
-username                    The username to authenticate to the server
+username                The username to authenticate to the server
 
-password                    The password to authenticate to the server
+password                The password to authenticate to the server
 
-status                      Paramer to disable status check for the server (default: on)
+status                  Paramer to disable status check for the server (default: on)
 
-replicationInfo             Paramer to show replication info line if exists for the server (default: on)
+replicationInfo         Paramer to show replication info line if exists for the server (default: on)
 
-replicaSet                  Paramer to disable replica set status check for the server (default: on)
+replicaSet              Paramer to disable replica set status check for the server (default: on)
 
-hideReplicationOperations   Paramer to hide constantly appeared replication operations on the masters and the slaves
-                            (default: on)
+replicationOperations   Paramer to hide constantly appeared replication operations on the masters and the slaves
+                        (default: on)
 
 ## License
 
@@ -46,3 +46,4 @@ This tool is released under the ISC License, whose text is included to the sourc
 with and approved by the Open Source Initiative [1].
 
 [1] http://opensource.org/licenses/isc-license.txt
+
