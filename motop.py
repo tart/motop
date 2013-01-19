@@ -210,7 +210,10 @@ class Operation:
         self.__state = state
         self.__duration = duration
         self.__namespace = namespace
-        self.__query = json.loads (query, object_hook = json_util.object_hook) if isinstance (query, str) else query
+        if isinstance (query, str) and query [0] == '{' and query [-1] == '}':
+            self.__query = json.loads (query, object_hook = json_util.object_hook)
+        else:
+            self.__query = query
 
     def sortOrder (self):
         return self.__duration if self.__duration is not None else -1
@@ -234,6 +237,9 @@ class Operation:
     def kill (self):
         return self.__server.killOperation (self.__opid)
 
+    def executable (self):
+        return isinstance (self.__query, dict) and self.__namespace and self.__query
+
     def __queryParts (self):
         """Translate query parts to arguments of pymongo find method."""
         assert isinstance (self.__query, dict)
@@ -251,43 +257,35 @@ class Operation:
             return queryParts
         return {'spec': self.__query}
 
-    def examine (self):
-        """Print the query parts."""
-        if self.__query:
-            queryParts = self.__queryParts ()
-            for key, value in queryParts.items ():
-                print (key.title () + ':', end = ' ')
-                if isinstance (value, list):
-                    print (', '.join ([pair [0] + ': ' + str (pair [1]) for pair in value]))
-                elif isinstance (value, dict):
-                    print (json.dumps (value, default = json_util.default, indent = 4))
-                else:
-                    print (value)
-
     def explain (self):
         """Print the output of the explain command executed on the server."""
-        if self.__namespace and self.__query:
-            databaseName, collectionName = self.__namespace.split ('.', 1)
-            queryParts = self.__queryParts ()
-            assert 'explain' not in queryParts
-            explainOutput = self.__server.explainQuery (databaseName, collectionName, **queryParts)
-            print ('Cursor:', explainOutput ['cursor'])
-            print ('Indexes:', end = ' ')
-            for index in explainOutput ['indexBounds']:
-                print (index, end = ' ')
-            print ()
-            print ('IndexOnly:', explainOutput ['indexOnly'])
-            print ('MultiKey:', explainOutput ['isMultiKey'])
-            print ('Miliseconds:', explainOutput ['millis'])
-            print ('Documents:', explainOutput ['n'])
-            print ('ChunkSkips:', explainOutput ['nChunkSkips'])
-            print ('Yields:', explainOutput ['nYields'])
-            print ('Scanned:', explainOutput ['nscanned'])
-            print ('ScannedObjects:', explainOutput ['nscannedObjects'])
-            if 'scanAndOrder' in explainOutput:
-                print ('ScanAndOrder:', explainOutput ['scanAndOrder'])
-        else:
-            print ('Only queries with namespace can be explained.')
+        databaseName, collectionName = self.__namespace.split ('.', 1)
+        queryParts = self.__queryParts ()
+        for key, value in queryParts.items ():
+            print (key.title () + ':', end = ' ')
+            if isinstance (value, list):
+                print (', '.join ([pair [0] + ': ' + str (pair [1]) for pair in value]))
+            elif isinstance (value, dict):
+                print (json.dumps (value, default = json_util.default, indent = 4))
+            else:
+                print (value)
+        assert 'explain' not in queryParts
+        explainOutput = self.__server.explainQuery (databaseName, collectionName, **queryParts)
+        print ('Cursor:', explainOutput ['cursor'])
+        print ('Indexes:', end = ' ')
+        for index in explainOutput ['indexBounds']:
+            print (index, end = ' ')
+        print ()
+        print ('IndexOnly:', explainOutput ['indexOnly'])
+        print ('MultiKey:', explainOutput ['isMultiKey'])
+        print ('Miliseconds:', explainOutput ['millis'])
+        print ('Documents:', explainOutput ['n'])
+        print ('ChunkSkips:', explainOutput ['nChunkSkips'])
+        print ('Yields:', explainOutput ['nYields'])
+        print ('Scanned:', explainOutput ['nscanned'])
+        print ('ScannedObjects:', explainOutput ['nscannedObjects'])
+        if 'scanAndOrder' in explainOutput:
+            print ('ScanAndOrder:', explainOutput ['scanAndOrder'])
 
 class ExecuteFailure (Exception):
     def __init__ (self, procedure):
@@ -600,8 +598,10 @@ class QueryScreen:
     def __explainAction (self):
         operation = self.__askForOperation ()
         if operation:
-            operation.examine ()
-            operation.explain ()
+            if operation.exacutable ():
+                operation.explain ()
+            else:
+                print ('Only queries with namespace can be explained.')
 
     def __killAction (self):
         operation = self.__askForOperation ()
