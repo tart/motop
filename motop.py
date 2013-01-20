@@ -142,8 +142,6 @@ class ReplicaSetMember:
         self.__increment = increment
         self.__ping = ping
         self.__server = server
-        self.__mongo_password = None
-        self.__mongo_username = None
 
     def __str__ (self):
         return self.__name
@@ -497,7 +495,7 @@ class Console:
 class Configuration:
     defaultFile = os.path.splitext (__file__) [0] + '.conf'
     optionalVariables = ['username', 'password']
-    choices = ['status', 'replicationInfo', 'replicaSet', 'replicationOperations']
+    choices = ['status', 'replicationInfo', 'replicaSet', 'operations', 'replicationOperations']
 
     def __init__ (self, filePath):
         """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
@@ -515,76 +513,75 @@ class Configuration:
         if self.__parser:
             return self.__parser.sections ()
 
-    def chosenSections (self):
-        for choice in self.choices:
-            yield choice, [section for section in self.sections () if self.__parser.getboolean (section, choice)]
+    def __server (self, section):
+        address = self.__parser.get (section, 'address')
+        username = self.__parser.get (section, 'username')
+        password = self.__parser.get (section, 'password')
+        return Server (section, address, username, password)
 
-    def servers (self):
-        for section in self.sections ():
-            address = self.__parser.get (section, 'address')
-            username = self.__parser.get (section, 'username')
-            password = self.__parser.get (section, 'password')
-            yield Server (section, address, username, password)
+    def chosenServers (self, choice):
+        return [self.__server (section) for section in self.sections () if self.__parser.getboolean (section, choice)]
 
 class QueryScreen:
-    def __init__ (self, console, servers, **chosenSections):
+    def __init__ (self, console, **chosenServers):
         self.__console = console
-        self.__servers = servers
-        self.__chosenSections = chosenSections
+        self.__chosenServers = chosenServers
 
     def __status (self):
-        chosenSections = self.__chosenSections ['status']
-        return (server.status () for server in self.__servers if str (server) in chosenSections)
+        chosenServers = self.__chosenServers ['status']
+        return (server.status () for server in chosenServers)
  
     def __replicationInfos (self):
         replicationInfos = []
-        chosenSections = self.__chosenSections ['replicationInfo']
-        for server in self.__servers:
-            if str (server) in chosenSections:
-                replicationInfo = server.replicationInfo ()
-                if replicationInfo:
-                    replicationInfos.append (replicationInfo)
-                else:
-                    chosenSections.remove (str (server))
+        chosenServers = self.__chosenServers ['replicationInfo']
+        for server in chosenServers:
+            replicationInfo = server.replicationInfo ()
+            if replicationInfo:
+                replicationInfos.append (replicationInfo)
+            else:
+                chosenServers.remove (server)
         return replicationInfos
 
     def __replicaSetMembers (self):
         """Return unique replica sets of the servers."""
         replicaSets = []
-        chosenSections = self.__chosenSections ['replicaSet']
+        chosenServers = self.__chosenServers ['replicaSet']
         def add (replicaSet):
             """Merge same replica sets by revising the existent one."""
             for existentReplicaSet in replicaSets:
                 if str (existentReplicaSet) == str (replicaSet):
                     return existentReplicaSet.revise (replicaSet)
             return replicaSets.append (replicaSet)
-        for server in self.__servers:
-            if str (server) in chosenSections:
-                try:
-                    add (server.replicaSet ())
-                except ExecuteFailure:
-                    chosenSections.remove (str (server))
+        for server in chosenServers:
+            try:
+                add (server.replicaSet ())
+            except ExecuteFailure:
+                chosenServers.remove (server)
         return [member for replicaSet in replicaSets for member in replicaSet.members ()]
 
     def __operations (self):
         operations = []
-        for server in self.__servers:
-            hideReplicationOperations = str (server) not in self.__chosenSections ['replicationOperations']
+        chosenServers = self.__chosenServers ['operations']
+        for server in chosenServers:
+            hideReplicationOperations = server not in self.__chosenServers ['replicationOperations']
             for operation in server.currentOperations (hideReplicationOperations):
                 operations.append (operation)
         return sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True)
 
     def __refresh (self):
-        blocks = [ServerStatus.block]
-        ServerStatus.block.reset (self.__status ())
-        if self.__chosenSections ['replicationInfo']:
+        blocks = []
+        if self.__chosenServers ['status']:
+            blocks.append (ServerStatus.block)
+            ServerStatus.block.reset (self.__status ())
+        if self.__chosenServers ['replicationInfo']:
             blocks.append (ReplicationInfo.block)
             ReplicationInfo.block.reset (self.__replicationInfos ())
-        if self.__chosenSections ['replicaSet']:
+        if self.__chosenServers ['replicaSet']:
             blocks.append (ReplicaSetMember.block)
             ReplicaSetMember.block.reset (self.__replicaSetMembers ())
-        blocks.append (Operation.block)
-        Operation.block.reset (self.__operations ())
+        if self.__chosenServers ['operations']:
+            blocks.append (Operation.block)
+            Operation.block.reset (self.__operations ())
         self.__console.refresh (blocks)
 
     def __askForOperation (self):
@@ -652,16 +649,13 @@ class Motop:
         arguments = self.parseArguments ()
         configuration = Configuration (arguments.conf)
         with ConsoleActivator () as console:
-            servers = []
-            if configuration.sections ():
-                for server in configuration.servers ():
-                    servers.append (server)
-                chosenSections = dict (configuration.chosenSections ())
-            else:
-                for address in arguments.addresses:
-                    servers.append (Server (address))
-                chosenSections = {choice: list (arguments.addresses) for choice in configuration.choices}
-            queryScreen = QueryScreen (console, servers, **chosenSections)
+            chosenServersForChoice = {}
+            for choice in configuration.choices:
+                if configuration.sections ():
+                    chosenServersForChoice [choice] = configuration.chosenServers (choice)
+                else:
+                    chosenServersForChoice [choice] = [Server (address) for address in arguments.addresses]
+            queryScreen = QueryScreen (console, **chosenServersForChoice)
             try:
                 queryScreen.action ()
             except KeyboardInterrupt: pass

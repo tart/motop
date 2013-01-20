@@ -31,13 +31,15 @@ username                The username to authenticate to the server
 
 password                The password to authenticate to the server
 
-status                  Paramer to disable status check for the server (default: on)
+status                  Paramer to show status for the server (default: on)
 
-replicationInfo         Paramer to show replication info line if exists for the server (default: on)
+replicationInfo         Paramer to show replication info for the server (default: on)
 
-replicaSet              Paramer to disable replica set status check for the server (default: on)
+replicaSet              Paramer to show replica set status for the server (default: on)
 
-replicationOperations   Paramer to hide constantly appeared replication operations on the masters and the slaves
+operations              Paramer to show operations for the server (default: on)
+
+replicationOperations   Paramer to show constantly appeared replication operations on the masters and the slaves
                         (default: on)
 
 ## License
