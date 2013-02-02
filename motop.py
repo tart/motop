@@ -593,10 +593,12 @@ class Motop:
         """Create ArgumentParser instance. Return parsed arguments."""
         from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
         parser = ArgumentParser (formatter_class = ArgumentDefaultsHelpFormatter, description = self.__doc__)
-        parser.add_argument ('hosts', metavar = 'host', nargs = '*', default = ['localhost:27017'])
-        parser.add_argument ('-u', '--username', dest = 'username')
-        parser.add_argument ('-p', '--password', dest = 'password')
-        parser.add_argument ('-c', '--conf', dest = 'conf', default = Configuration.defaultFile)
+        parser.add_argument ('hosts', metavar = 'host', nargs = '*', default = ['localhost:27017'],
+                help = 'address of the server or section name on the configuration file')
+        parser.add_argument ('-u', '--username', dest = 'username', help = 'username for authentication')
+        parser.add_argument ('-p', '--password', dest = 'password', help = 'password for authentication')
+        parser.add_argument ('-c', '--conf', dest = 'conf', default = Configuration.defaultFile,
+                help = 'path of configuration file')
         parser.add_argument ('-V', '--version', action = 'version', version = 'Motop ' + str (self.version))
         return parser.parse_args ()
 
