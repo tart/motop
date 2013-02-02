@@ -315,36 +315,6 @@ class Console:
                 values.append (value)
         return values
 
-class Configuration:
-    defaultFile = os.path.splitext (__file__) [0] + '.conf'
-    optionalVariables = ['username', 'password']
-    choices = ['status', 'replicationInfo', 'replicaSet', 'operations', 'replicationOperations']
-
-    def __init__ (self, filePath):
-        """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
-        import the same class for Python 3 compatibility."""
-        defaults = [(variable, None) for variable in self.optionalVariables]
-        defaults += [(choice, 'on') for choice in self.choices]
-        try:
-            from ConfigParser import SafeConfigParser
-        except ImportError:
-            from configparser import SafeConfigParser
-        self.__parser = SafeConfigParser (dict (defaults))
-        self.__parser.read (filePath)
-
-    def sections (self):
-        if self.__parser:
-            return self.__parser.sections ()
-
-    def __server (self, section):
-        address = self.__parser.get (section, 'address')
-        username = self.__parser.get (section, 'username')
-        password = self.__parser.get (section, 'password')
-        return Server (section, address, username, password)
-
-    def chosenServers (self, choice):
-        return [self.__server (section) for section in self.sections () if self.__parser.getboolean (section, choice)]
-
 class StatusBlock (Block):
     columnHeaders = ['Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O']
 
@@ -570,19 +540,65 @@ class QueryScreen:
             if button == 'K':
                 self.__operationBlock.batchKill (*self.__console.askForInput ('Sec'))
 
+class Configuration:
+    defaultFile = os.path.splitext (__file__) [0] + '.conf'
+    optionalVariables = ['username', 'password']
+    choices = ['status', 'replicationInfo', 'replicaSet', 'operations', 'replicationOperations']
+
+    def __init__ (self, filePath):
+        """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
+        import the same class for Python 3 compatibility."""
+        self.__servers = {}
+        self.__chosenSections = []
+        try:
+            from ConfigParser import SafeConfigParser
+        except ImportError:
+            from configparser import SafeConfigParser
+        defaults = [(variable, None) for variable in self.optionalVariables]
+        defaults += [(choice, 'on') for choice in self.choices]
+        self.__parser = SafeConfigParser (dict (defaults))
+        if self.__parser.read (filePath):
+            for section in self.__parser.sections ():
+                address = self.__parser.get (section, 'address')
+                username = self.__parser.get (section, 'username')
+                password = self.__parser.get (section, 'password')
+                self.__servers [section] = Server (section, address, username, password)
+
+    def addArgumentHost (self, host):
+        """Choose the server if it exists in the configuration, add servers from arguments if configuration does not
+        exists."""
+        if self.__parser.sections ():
+            for section in self.__parser.sections ():
+                if section == host or self.__parser.get (section, 'address') == host:
+                    self.__chosenSections.append (section)
+        else:
+            self.__servers [host] = Server (host)
+
+    def chosenServers (self, choice):
+        """Return servers for the given choice if they are in configuration, return all if configuration does not
+        exists."""
+        servers = []
+        for section, server in self.__servers.items ():
+            if self.__parser.sections ():
+                if self.__parser.getboolean (section, choice):
+                    if not self.__chosenSections or section in self.__chosenSections:
+                        servers.append (server)
+            else:
+                servers.append (server)
+        return servers
+
 class Motop:
     """Realtime monitoring tool for several MongoDB servers. Shows current operations ordered by durations every
     second."""
     version = 1.0
-    versionName = 'Motop ' + str (version)
 
     def parseArguments (self):
         """Create ArgumentParser instance. Return parsed arguments."""
         from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
         parser = ArgumentParser (formatter_class = ArgumentDefaultsHelpFormatter, description = self.__doc__)
-        parser.add_argument ('addresses', metavar = 'address', nargs = '*', default = 'localhost:27017')
+        parser.add_argument ('hosts', metavar = 'host', nargs = '*', default = ['localhost:27017'])
         parser.add_argument ('-c', '--conf', dest = 'conf', default = Configuration.defaultFile)
-        parser.add_argument ('-V', '--version', action = 'version', version = self.versionName)
+        parser.add_argument ('-V', '--version', action = 'version', version = 'Motop ' + str (self.version))
         return parser.parse_args ()
 
     def __init__ (self):
@@ -591,12 +607,11 @@ class Motop:
         arguments = self.parseArguments ()
         configuration = Configuration (arguments.conf)
         with Console () as console:
+            for host in arguments.hosts:
+                configuration.addArgumentHost (host)
             chosenServersForChoice = {}
             for choice in configuration.choices:
-                if configuration.sections ():
-                    chosenServersForChoice [choice] = configuration.chosenServers (choice)
-                else:
-                    chosenServersForChoice [choice] = [Server (address) for address in arguments.addresses]
+                chosenServersForChoice [choice] = configuration.chosenServers (choice)
             queryScreen = QueryScreen (console, **chosenServersForChoice)
             try:
                 queryScreen.action ()
