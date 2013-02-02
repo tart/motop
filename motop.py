@@ -411,7 +411,7 @@ class Query:
                     key = 'spec'
                 if key == 'orderby':
                     key = 'sort'
-                    value = value.items ()
+                    value = list (value.items ())
                 if key == 'explain':
                     self.__explain = True
                 self.__parts [key] = value
@@ -476,7 +476,7 @@ class OperationBlock (Block):
                     else:
                         cells.append (Query (**operation ['query']))
                 self.__lines.append (cells)
-        self.__lines.sort (key = lambda line: line [3], reverse = True)
+        self.__lines.sort (key = lambda line: line [3] or -1, reverse = True)
         Block.reset (self, self.__lines)
 
     def __findServer (self, serverName):
