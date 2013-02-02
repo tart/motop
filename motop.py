@@ -415,37 +415,36 @@ class Server:
             command += ' --password ' + self.__password
         os.system (command)
 
-class ConsoleActivator:
-    """Class to use with "with" statement to hide pressed buttons on the console."""
+class DeactiveConsole ():
+    """Class to use with "with" statement as "wihout" statement for Console class defined below."""
+    def __init__ (self, console):
+        self.__console = console
+
     def __enter__ (self):
+        self.__console.__exit__ ()
+
+    def __exit__ (self, *ignored):
+        self.__console.__enter__ ()
+
+class Console:
+    """Main class for input and output. Used with "with" statement to hide pressed buttons on the console."""
+    def __init__ (self):
+        self.__deactiveConsole = DeactiveConsole (self)
+        self.__saveSize ()
+        signal.signal (signal.SIGWINCH, self.__saveSize)
+
+    def __enter__ (self):
+        """Hide pressed buttons on the console."""
         try:
             self.__settings = termios.tcgetattr (sys.stdin)
             tty.setcbreak (sys.stdin.fileno())
         except termios.error:
             self.__settings = None
-        return Console (self)
+        return self
 
     def __exit__ (self, *ignored):
         if self.__settings:
             termios.tcsetattr (sys.stdin, termios.TCSADRAIN, self.__settings)
-
-class ConsoleDeactivator ():
-    """Class to use with "with" statement as "wihout" statement for ConsoleActivator."""
-    def __init__ (self, consoleActivator):
-        self.__consoleActivator = consoleActivator
-
-    def __enter__ (self):
-        self.__consoleActivator.__exit__ ()
-
-    def __exit__ (self, *ignored):
-        self.__consoleActivator.__enter__ ()
-
-class Console:
-    """Main class for input and output."""
-    def __init__ (self, consoleActivator):
-        self.__consoleDeactivator = ConsoleDeactivator (consoleActivator)
-        self.__saveSize ()
-        signal.signal (signal.SIGWINCH, self.__saveSize)
 
     def __saveSize (self, *ignored):
         try:
@@ -482,7 +481,7 @@ class Console:
 
     def askForInput (self, *attributes):
         """Ask for input for given attributes in given order."""
-        with self.__consoleDeactivator:
+        with self.__deactiveConsole:
             print ()
             values = []
             for attribute in attributes:
@@ -648,7 +647,7 @@ class Motop:
         from arguments. Show the query screen."""
         arguments = self.parseArguments ()
         configuration = Configuration (arguments.conf)
-        with ConsoleActivator () as console:
+        with Console () as console:
             chosenServersForChoice = {}
             for choice in configuration.choices:
                 if configuration.sections ():
