@@ -30,8 +30,8 @@ import termios
 import struct
 import fcntl
 import select
-import json
 import signal
+import json
 import pymongo
 from bson import json_util
 from time import sleep
@@ -52,24 +52,15 @@ class Value (int):
 
 class Block:
     """Class to print blocks of ordered printables."""
-    def __init__ (self, *columnHeaders):
+    def __init__ (self, columnHeaders):
         self.__columnHeaders = columnHeaders
         self.__columnWidths = [6] * len (self.__columnHeaders)
 
-    def reset (self, printables):
-        self.__lines = []
-        self.__lineClass = None
-        for printable in printables:
-            if not self.__lineClass:
-                assert hasattr (printable, 'line')
-                self.__lineClass = printable.__class__
-            else:
-                assert isinstance (printable, self.__lineClass)
-            self.__lines.append (printable.line ())
+    def reset (self, lines):
+        self.__lines = lines
 
     def __len__ (self):
-        """Return line count plus one for header, one for blank line at bottom."""
-        return len (self.__lines) + 2
+        return len (self.__lines)
 
     def __printLine (self, line, width, bold = False):
         """Print the cells separated by 2 spaces, cut the part after the width."""
@@ -86,8 +77,8 @@ class Block:
             width -= self.__columnWidths [index]
         print ()
 
-    def printLines (self, height, width):
-        """Print the lines set with reset, cuts the ones after the height."""
+    def print (self, height, width):
+        """Print the lines, cut the ones after the height."""
         assert height > 1
         self.__printLine (self.__columnHeaders, width, True)
         height -= 1
@@ -97,193 +88,6 @@ class Block:
             assert len (line) <= len (self.__columnHeaders)
             height -= 1
             self.__printLine (line, width)
-
-    def findLines (self, condition):
-        """Return the printables from self.__lineClass saved with reset."""
-        return [self.__lineClass (*line) for line in self.__lines if condition (line)]
-
-class ServerStatus:
-    def __init__ (self, server, **status):
-        self.__server = server
-        self.__status = status
-
-    block = Block ('Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O')
-
-    def line (self):
-        cells = []
-        cells.append (str (self.__server))
-        cells.append (Value (self.__status ['qPS']))
-        cells.append (Value (self.__status ['activeClients']))
-        cells.append (Value (self.__status ['currentQueue']))
-        cells.append (Value (self.__status ['flushes']))
-        cells.append ('{0} / {1}'.format (Value (self.__status ['currentConn']), Value (self.__status ['totalConn'])))
-        cells.append ('{0} / {1}'.format (Value (self.__status ['residentMem']), Value (self.__status ['mappedMem'])))
-        cells.append ('{0} / {1}'.format (Value (self.__status ['bytesIn']), Value (self.__status ['bytesOut'])))
-        return cells
-
-class ReplicationInfo:
-    def __init__ (self, server, source, syncedTo):
-        self.__server = server
-        self.__source = source
-        self.__syncedTo = syncedTo
-
-    block = Block ('Server', 'Source', 'SyncedTo')
-
-    def line (self):
-        return self.__server, self.__source, self.__syncedTo.as_datetime ()
-
-class ReplicaSetMember:
-    def __init__ (self, replicaSet, name, state, uptime, lag, increment, ping, server = None):
-        self.__replicaSet = replicaSet
-        self.__name = name
-        self.__state = state.lower ()
-        self.__uptime = uptime
-        self.__lag = lag
-        self.__increment = increment
-        self.__ping = ping
-        self.__server = server
-
-    def __str__ (self):
-        return self.__name
-
-    def revise (self, otherMember):
-        """Merge properties of the other replica set member with following rules."""
-        if otherMember.__uptime is not None:
-            if self.__uptime is None or self.__uptime < otherMember.__uptime:
-                self.__uptime = otherMember.__uptime
-        if otherMember.__replicaSet.masterState ():
-            self.__lag = otherMember.__lag
-        if self.__increment < otherMember.__increment:
-            self.__increment = otherMember.__increment
-        if otherMember.__ping is not None:
-            if self.__ping is None or self.__ping < otherMember.__ping:
-                self.__ping = otherMember.__ping
-        if otherMember.__server is not None and self.__server is None:
-            self.__server = otherMember.__server
-
-    block = Block ('Server', 'Set', 'State', 'Uptime', 'Lag', 'Inc', 'Ping')
-
-    def line (self):
-        cells = []
-        cells.append (str (self.__server) if self.__server else self.__name)
-        cells.append (str (self.__replicaSet))
-        cells.append (self.__state)
-        cells.append (self.__uptime)
-        cells.append (self.__lag)
-        cells.append (self.__increment)
-        cells.append (self.__ping)
-        return cells
-
-class ReplicaSet:
-    def __init__ (self, name, state):
-        self.__name = name
-        self.__state = state
-        self.__members = []
-
-    def __str__ (self):
-        return self.__name
-
-    def masterState (self):
-        return self.__state == 1
-
-    def addMember (self, *args):
-        self.__members.append (ReplicaSetMember (self, *args))
-
-    def members (self):
-        return self.__members
-
-    def findMember (self, name):
-        for member in self.__members:
-            if str (member) == name:
-                return member
-
-    def revise (self, other):
-        for member in self.__members:
-            member.revise (other.findMember (str (member)))
-
-class Operation:
-    def __init__ (self, server, opid, state, duration = None, namespace = None, query = None):
-        self.__server = server
-        self.__opid = opid
-        self.__state = state
-        self.__duration = duration
-        self.__namespace = namespace
-        if isinstance (query, str) and query [0] == '{' and query [-1] == '}':
-            self.__query = json.loads (query, object_hook = json_util.object_hook)
-        else:
-            self.__query = query
-
-    def sortOrder (self):
-        return self.__duration if self.__duration is not None else -1
-
-    block = Block ('Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query')
-
-    def line (self):
-        cells = []
-        cells.append (self.__server)
-        cells.append (self.__opid)
-        cells.append (self.__state)
-        cells.append (self.__duration)
-        cells.append (self.__namespace)
-        if self.__query:
-            if '$msg' in self.__query:
-                cells.append (self.__query ['$msg'])
-            else:
-                cells.append (json.dumps (self.__query, default = json_util.default))
-        return cells
-
-    def kill (self):
-        return self.__server.killOperation (self.__opid)
-
-    def executable (self):
-        return isinstance (self.__query, dict) and self.__namespace and self.__query
-
-    def __queryParts (self):
-        """Translate query parts to arguments of pymongo find method."""
-        assert isinstance (self.__query, dict)
-        if any ([key in ('query', '$query') for key in self.__query.keys ()]):
-            queryParts = {}
-            for key, value in self.__query.items ():
-                if key in ('query', '$query'):
-                    queryParts ['spec'] = value
-                elif key in ('explain', '$explain'):
-                    queryParts ['explain'] = True
-                elif key in ('orderby', '$orderby'):
-                    queryParts ['sort'] = [(key, value) for key, value in value.items ()]
-                else:
-                    raise Exception ('Unknown query part: ' + key)
-            return queryParts
-        return {'spec': self.__query}
-
-    def explain (self):
-        """Print the output of the explain command executed on the server."""
-        databaseName, collectionName = self.__namespace.split ('.', 1)
-        queryParts = self.__queryParts ()
-        for key, value in queryParts.items ():
-            print (key.title () + ':', end = ' ')
-            if isinstance (value, list):
-                print (', '.join ([pair [0] + ': ' + str (pair [1]) for pair in value]))
-            elif isinstance (value, dict):
-                print (json.dumps (value, default = json_util.default, indent = 4))
-            else:
-                print (value)
-        assert 'explain' not in queryParts
-        explainOutput = self.__server.explainQuery (databaseName, collectionName, **queryParts)
-        print ('Cursor:', explainOutput ['cursor'])
-        print ('Indexes:', end = ' ')
-        for index in explainOutput ['indexBounds']:
-            print (index, end = ' ')
-        print ()
-        print ('IndexOnly:', explainOutput ['indexOnly'])
-        print ('MultiKey:', explainOutput ['isMultiKey'])
-        print ('Miliseconds:', explainOutput ['millis'])
-        print ('Documents:', explainOutput ['n'])
-        print ('ChunkSkips:', explainOutput ['nChunkSkips'])
-        print ('Yields:', explainOutput ['nYields'])
-        print ('Scanned:', explainOutput ['nscanned'])
-        print ('ScannedObjects:', explainOutput ['nscannedObjects'])
-        if 'scanAndOrder' in explainOutput:
-            print ('ScanAndOrder:', explainOutput ['scanAndOrder'])
 
 class ExecuteFailure (Exception):
     def __init__ (self, procedure):
@@ -317,6 +121,9 @@ class Server:
     def __str__ (self):
         return self.__name
 
+    def address (self):
+        return self.__address
+
     def __execute (self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
         tryCount = 1
@@ -338,11 +145,11 @@ class Server:
         self.__oldValues [name] = value
         if oldValue:
             timespanSeconds = self.__timespan.seconds + (self.__timespan.microseconds / (10.0 ** 6))
-            return (value - oldValue) / timespanSeconds
+            return Value ((value - oldValue) / timespanSeconds)
         return 0
 
     def status (self):
-        """Get serverStatus from MongoDB, calculate time difference with the last time. Return ServerStatus object."""
+        """Get serverStatus from MongoDB, calculate time difference with the last time."""
         status = self.__execute (self.__connection.admin.command, 'serverStatus')
         oldCheckTime = self.__oldValues ['checkTime'] if 'checkTime' in self.__oldValues else None
         self.__oldValues ['checkTime'] = datetime.now ()
@@ -351,39 +158,44 @@ class Server:
         values = {}
         opcounters = status ['opcounters']
         values ['qPS'] = self.__statusChangePerSecond ('qPS', sum (opcounters.values ()))
-        values ['activeClients'] = status ['globalLock'] ['activeClients'] ['total']
-        values ['currentQueue'] = status ['globalLock'] ['currentQueue'] ['total']
+        values ['activeClients'] = Value (status ['globalLock'] ['activeClients'] ['total'])
+        values ['currentQueue'] = Value (status ['globalLock'] ['currentQueue'] ['total'])
         values ['flushes'] = self.__statusChangePerSecond ('flushes', status ['backgroundFlushing'] ['flushes'])
-        values ['currentConn'] = status ['connections'] ['current']
-        values ['totalConn'] = status ['connections'] ['available'] + status ['connections'] ['current']
-        values ['residentMem'] = status ['mem'] ['resident'] * (10 ** 6)
-        values ['mappedMem'] = status ['mem'] ['mapped'] * (10 ** 6)
+        values ['currentConn'] = Value (status ['connections'] ['current'])
+        values ['totalConn'] = Value (status ['connections'] ['available'] + status ['connections'] ['current'])
+        values ['residentMem'] = Value (status ['mem'] ['resident'] * (10 ** 6))
+        values ['mappedMem'] = Value (status ['mem'] ['mapped'] * (10 ** 6))
         values ['bytesIn'] = self.__statusChangePerSecond ('bytesIn', status ['network'] ['bytesIn'])
         values ['bytesOut'] = self.__statusChangePerSecond ('bytesOut', status ['network'] ['bytesOut'])
-        return ServerStatus (self, **values)
+        return values
 
     def replicationInfo (self):
         """Find replication source from the local collection."""
         sources = self.__execute (self.__connection.local.sources.find)
         for source in sources:
-            return ReplicationInfo (self, source ['host'], source ['syncedTo'])
+            values = {}
+            values ['source'] = source ['host']
+            syncedTo = source ['syncedTo']
+            values ['syncedTo'] = syncedTo.as_datetime ()
+            return values
 
-    def replicaSet (self):
+    def replicaSetMembers (self):
         """Execute replSetGetStatus operation on the server. Filter arbiters. Calculate the lag. Add relation to the
         member which is the server itself. Return the replica set."""
-        replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
-        replicaSet = ReplicaSet (replicaSetStatus ['set'], replicaSetStatus ['myState'])
-        for member in replicaSetStatus ['members']:
-            if 'statusStr' not in member or member ['statusStr'] not in ['ARBITER']:
-                uptime = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
-                ping = member ['pingMs'] if 'pingMs' in member else None
-                lag = replicaSetStatus ['date'] - member ['optimeDate']
-                optime = member ['optime']
-                if member ['name'] == self.__address:
-                    replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping, self)
-                else:
-                    replicaSet.addMember (member ['name'], member ['stateStr'], uptime, lag, optime.inc, ping)
-        return replicaSet
+        try:
+            replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
+        except ExecuteFailure: pass
+        else:
+            for member in replicaSetStatus ['members']:
+                if 'statusStr' not in member or member ['statusStr'] not in ['ARBITER']:
+                    values ['set'] = replicaSetStatus ['set']
+                    values ['name'] = member ['name']
+                    values ['state'] = member ['stateStr']
+                    values ['uptime'] = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
+                    values ['ping'] = member ['pingMs'] if 'pingMs' in member else None
+                    values ['lag'] = replicaSetStatus ['date'] - member ['optimeDate']
+                    values ['optime'] = member ['optime']
+                    yield values
 
     def currentOperations (self, hideReplicationOperations = False):
         """Execute currentOp operation on the server. Filter and yield returning operations."""
@@ -396,12 +208,21 @@ class Server:
                     """Condition to find replication operation on the slave. Do not look for more replication
                     operations if one found."""
                     continue
-            duration = op ['secs_running'] if 'secs_running' in op else None
-            yield Operation (self, op ['opid'], op ['op'], duration, op ['ns'], op ['query'] or None)
+            values = {}
+            values ['opid'] = op ['opid']
+            values ['state'] = op ['op']
+            values ['duration'] = op ['secs_running'] if 'secs_running' in op else None
+            values ['namespace'] = op ['ns']
+            if isinstance (op ['query'], str) and op ['query'] [0] == '{' and op ['query'] [-1] == '}':
+                values ['query'] = json.loads (op ['query'], object_hook = json_util.object_hook)
+            else:
+                values ['query'] = op ['query']
+            yield values
 
-    def explainQuery (self, databaseName, collectionName, **kwargs):
+    def explainQuery (self, namespace, findParameters):
+        databaseName, collectionName = namespace.split ('.', 1)
         collection = getattr (getattr (self.__connection, databaseName), collectionName)
-        cursor = self.__execute (collection.find, **kwargs)
+        cursor = self.__execute (collection.find, **findParameters)
         return self.__execute (cursor.explain)
 
     def killOperation (self, opid):
@@ -469,11 +290,14 @@ class Console:
         os.system ('clear')
         leftHeight = self.__height
         for block in blocks:
+            if not len (block):
+                """Do not show the block if there are no lines."""
+                continue
             if leftHeight <= 2:
-                """Do not show the block if there are not left lines for header and a row."""
+                """Do not show the block if there are not enough lines left for header and a row."""
                 break
-            height = len (block) if len (block) < leftHeight else leftHeight
-            block.printLines (height, self.__width)
+            height = len (block) + 2 if len (block) + 2 < leftHeight else leftHeight
+            block.print (height, self.__width)
             leftHeight -= height
             if leftHeight >= 2:
                 print ()
@@ -521,111 +345,230 @@ class Configuration:
     def chosenServers (self, choice):
         return [self.__server (section) for section in self.sections () if self.__parser.getboolean (section, choice)]
 
+class StatusBlock (Block):
+    columnHeaders = ['Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O']
+
+    def __init__ (self, servers):
+        Block.__init__ (self, self.columnHeaders)
+        self.__servers = servers
+
+    def __len__ (self):
+        return len (self.__servers)
+
+    def reset (self):
+        lines = []
+        for server in self.__servers:
+            status = server.status ()
+            cells = []
+            cells.append (server)
+            cells.append (status ['qPS'])
+            cells.append (status ['activeClients'])
+            cells.append (status ['currentQueue'])
+            cells.append (status ['flushes'])
+            cells.append ('{0} / {1}'.format (status ['currentConn'], status ['totalConn']))
+            cells.append ('{0} / {1}'.format (status ['residentMem'], status ['mappedMem']))
+            cells.append ('{0} / {1}'.format (status ['bytesIn'], status ['bytesOut']))
+            lines.append (cells)
+        Block.reset (self, lines)
+
+class ReplicationInfoBlock (Block):
+    columnHeaders = ['Server', 'Source', 'SyncedTo']
+
+    def __init__ (self, servers):
+        Block.__init__ (self, self.columnHeaders)
+        self.__servers = servers
+
+    def __len__ (self):
+        return len (self.__servers)
+
+    def reset (self):
+        lines = []
+        for server in self.__servers:
+            replicationInfo = server.replicationInfo ()
+            if replicationInfo:
+                cells = []
+                cells.append (server)
+                cells.append (replicationInfo ['source'])
+                cells.append (replicationInfo ['syncedTo'])
+                lines.append (cells)
+            else:
+                self.__servers.remove (server)
+        Block.reset (self, lines)
+
+class ReplicaSetMemberBlock (Block):
+    columnHeaders = ['Server', 'Set', 'State', 'Uptime', 'Lag', 'Inc', 'Ping']
+
+    def __init__ (self, servers):
+        Block.__init__ (self, self.columnHeaders)
+        self.__servers = servers
+
+    def __add (self, line):
+        """Merge same lines by revising the existent one."""
+        for existentLine in self.__lines:
+            if existentLine ['set'] == line ['set'] and existentLine ['name'] == line ['name']:
+                for key in line.keys ():
+                    if line [key]:
+                        if existentLine [key] < line [key]:
+                            existentLine [key] = line [key]
+                return
+        self.__lines.append (line)
+
+    def reset (self):
+        self.__lines = []
+        for server in self.__servers:
+            replicaSetMembers = server.replicaSetMembers ()
+            if replicaSetMembers:
+                for member in replicaSetMembers:
+                    cells = []
+                    cells.append (member ['name'])
+                    cells.append (member ['set'])
+                    cells.append (member ['state'])
+                    cells.append (member ['uptime'])
+                    cells.append (member ['ping'])
+                    cells.append (member ['lag'])
+                    cells.append (member ['optime'])
+                    self.add (cells)
+            else:
+                self.__servers.remove (server)
+        Block.reset (self, self.__lines)
+
+class Query:
+    def __init__ (self, **parts):
+        """Translate query parts to arguments of pymongo find method."""
+        self.__parts = {}
+        if any ([key in ('query', '$query') for key in parts.keys ()]):
+            for key, value in parts.items ():
+                if key [0] == '$':
+                    key = key [1:]
+                if key == 'query':
+                    key = 'spec'
+                if key == 'orderby':
+                    key = 'sort'
+                    value = value.items ()
+                if key == 'explain':
+                    self.__explain = True
+                self.__parts [key] = value
+        else:
+            self.__parts ['spec'] = parts
+
+    def __str__ (self):
+        return json.dumps (self.__parts, default = json_util.default)
+
+    def print (self):
+        """Print formatted query parts."""
+        for key, value in self.__parts.items ():
+            print (key.title () + ':', end = ' ')
+            if isinstance (value, list):
+                print (', '.join ([pair [0] + ': ' + str (pair [1]) for pair in value]))
+            elif isinstance (value, dict):
+                print (json.dumps (value, default = json_util.default, indent = 4))
+            else:
+                print (value)
+
+    def printExplain (self, server, namespace):
+        """Print the output of the explain command executed on the server."""
+        explainOutput = server.explainQuery (namespace, self.__parts)
+        print ('Cursor:', explainOutput ['cursor'])
+        print ('Indexes:', end = ' ')
+        for index in explainOutput ['indexBounds']:
+            print (index, end = ' ')
+        print ()
+        print ('IndexOnly:', explainOutput ['indexOnly'])
+        print ('MultiKey:', explainOutput ['isMultiKey'])
+        print ('Miliseconds:', explainOutput ['millis'])
+        print ('Documents:', explainOutput ['n'])
+        print ('ChunkSkips:', explainOutput ['nChunkSkips'])
+        print ('Yields:', explainOutput ['nYields'])
+        print ('Scanned:', explainOutput ['nscanned'])
+        print ('ScannedObjects:', explainOutput ['nscannedObjects'])
+        if 'scanAndOrder' in explainOutput:
+            print ('ScanAndOrder:', explainOutput ['scanAndOrder'])
+
+class OperationBlock (Block):
+    columnHeaders = ['Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query']
+
+    def __init__ (self, servers, replicationOperationServers):
+        Block.__init__ (self, self.columnHeaders)
+        self.__servers = servers
+        self.__replicationOperationServers = replicationOperationServers
+
+    def reset (self):
+        self.__lines = []
+        for server in self.__servers:
+            hideReplicationOperations = server not in self.__replicationOperationServers
+            for operation in server.currentOperations (hideReplicationOperations):
+                cells = []
+                cells.append (server)
+                cells.append (operation ['opid'])
+                cells.append (operation ['state'])
+                cells.append (operation ['duration'])
+                cells.append (operation ['namespace'])
+                if operation ['query']:
+                    if '$msg' in operation ['query']:
+                        cells.append (operation ['query'] ['$msg'])
+                    else:
+                        cells.append (Query (**operation ['query']))
+                self.__lines.append (cells)
+        self.__lines.sort (key = lambda line: line [3], reverse = True)
+        Block.reset (self, self.__lines)
+
+    def __findServer (self, serverName):
+        for server in self.__servers:
+            if str (server) == serverName:
+                return server
+
+    def __findLine (self, serverName, opid):
+        for line in self.__lines:
+            if str (line [0]) == serverName and str (line [1]) == opid:
+                return line
+
+    def explainQuery (self, *parameters):
+        line = self.__findLine (*parameters)
+        if line [4] and line [5] and isinstance (line [5], Query):
+            query = line [5]
+            query.print ()
+            query.printExplain (line [0], line [4])
+
+    def kill (self, serverName, opid):
+        server = self.__findServer (serverName)
+        server.killOperation (opid)
+
+    def batchKill (self, second):
+        """Kill operations running more than given seconds from top to bottom."""
+        second = int (second)
+        for line in self.__lines:
+            if line [3] < second:
+                """Do not look futher as the list is reverse ordered by seconds."""
+                break
+            server = line [0]
+            server.killOperation (line [1])
+
 class QueryScreen:
     def __init__ (self, console, **chosenServers):
         self.__console = console
-        self.__chosenServers = chosenServers
-
-    def __status (self):
-        chosenServers = self.__chosenServers ['status']
-        return (server.status () for server in chosenServers)
- 
-    def __replicationInfos (self):
-        replicationInfos = []
-        chosenServers = self.__chosenServers ['replicationInfo']
-        for server in chosenServers:
-            replicationInfo = server.replicationInfo ()
-            if replicationInfo:
-                replicationInfos.append (replicationInfo)
-            else:
-                chosenServers.remove (server)
-        return replicationInfos
-
-    def __replicaSetMembers (self):
-        """Return unique replica sets of the servers."""
-        replicaSets = []
-        chosenServers = self.__chosenServers ['replicaSet']
-        def add (replicaSet):
-            """Merge same replica sets by revising the existent one."""
-            for existentReplicaSet in replicaSets:
-                if str (existentReplicaSet) == str (replicaSet):
-                    return existentReplicaSet.revise (replicaSet)
-            return replicaSets.append (replicaSet)
-        for server in chosenServers:
-            try:
-                add (server.replicaSet ())
-            except ExecuteFailure:
-                chosenServers.remove (server)
-        return [member for replicaSet in replicaSets for member in replicaSet.members ()]
-
-    def __operations (self):
-        operations = []
-        chosenServers = self.__chosenServers ['operations']
-        for server in chosenServers:
-            hideReplicationOperations = server not in self.__chosenServers ['replicationOperations']
-            for operation in server.currentOperations (hideReplicationOperations):
-                operations.append (operation)
-        return sorted (operations, key = lambda operation: operation.sortOrder (), reverse = True)
-
-    def __refresh (self):
-        blocks = []
-        if self.__chosenServers ['status']:
-            blocks.append (ServerStatus.block)
-            ServerStatus.block.reset (self.__status ())
-        if self.__chosenServers ['replicationInfo']:
-            blocks.append (ReplicationInfo.block)
-            ReplicationInfo.block.reset (self.__replicationInfos ())
-        if self.__chosenServers ['replicaSet']:
-            blocks.append (ReplicaSetMember.block)
-            ReplicaSetMember.block.reset (self.__replicaSetMembers ())
-        if self.__chosenServers ['operations']:
-            blocks.append (Operation.block)
-            Operation.block.reset (self.__operations ())
-        self.__console.refresh (blocks)
-
-    def __askForOperation (self):
-        operationInput = self.__console.askForInput ('Server', 'Opid')
-        if len (operationInput) == 2:
-            condition = lambda line: str (line [0]) == operationInput [0] and str (line [1]) == operationInput [1]
-            operations = Operation.block.findLines (condition)
-            if len (operations) == 1:
-                return operations [0]
-
-    def __explainAction (self):
-        operation = self.__askForOperation ()
-        if operation:
-            if operation.exacutable ():
-                operation.explain ()
-            else:
-                print ('Only queries with namespace can be explained.')
-
-    def __killAction (self):
-        operation = self.__askForOperation ()
-        if operation:
-            operation.kill ()
-
-    def __batchKillAction (self):
-        durationInput = self.__console.askForInput ('Sec')
-        if durationInput:
-            condition = lambda line: len (line) >= 3 and line [3] > int (durationInput [0])
-            operations = Operation.block.findLines (condition)
-            for operation in operations:
-                operation.kill ()
+        self.__blocks = []
+        self.__blocks.append (StatusBlock (chosenServers ['status']))
+        self.__blocks.append (ReplicationInfoBlock (chosenServers ['replicationInfo']))
+        self.__blocks.append (ReplicaSetMemberBlock (chosenServers ['replicaSet']))
+        self.__operationBlock = OperationBlock (chosenServers ['operations'], chosenServers ['replicationOperations'])
+        self.__blocks.append (self.__operationBlock)
 
     def action (self):
-        """Refresh the screen, perform actions for the pressed button."""
+        """Reset the blocks, refresh the console, perform actions for the pressed button."""
         button = None
         while button != 'q':
-            self.__refresh ()
+            for block in self.__blocks:
+                block.reset ()
+            self.__console.refresh (self.__blocks)
             button = self.__console.checkButton (1)
             while button in ('e', 'k'):
                 if button == 'e':
-                    self.__explainAction ()
+                    self.__operationBlock.explainQuery (*self.__console.askForInput ('Server', 'Opid'))
                 elif button == 'k':
-                    self.__killAction ()
+                    self.__operationBlock.kill (*self.__console.askForInput ('Server', 'Opid'))
                 button = self.__console.checkButton ()
             if button == 'K':
-                self.__batchKillAction ()
+                self.__operationBlock.batchKill (*self.__console.askForInput ('Sec'))
 
 class Motop:
     """Realtime monitoring tool for several MongoDB servers. Shows current operations ordered by durations every
