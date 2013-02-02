@@ -108,7 +108,7 @@ class Server:
         if self.__username and self.__password:
             self.__connection.admin.authenticate (self.__username, self.__password)
 
-    def __init__ (self, name, address = None, username = None, password = None, hideReplicationOperations = False):
+    def __init__ (self, name, address, username, password):
         self.__name = name
         self.__address = address or name
         if ':' not in self.__address:
@@ -120,9 +120,6 @@ class Server:
 
     def __str__ (self):
         return self.__name
-
-    def address (self):
-        return self.__address
 
     def __execute (self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
@@ -564,7 +561,7 @@ class Configuration:
                 password = self.__parser.get (section, 'password')
                 self.__servers [section] = Server (section, address, username, password)
 
-    def addArgumentHost (self, host):
+    def addArgumentHost (self, host, username, password):
         """Choose the server if it exists in the configuration, add servers from arguments if configuration does not
         exists."""
         if self.__parser.sections ():
@@ -572,7 +569,7 @@ class Configuration:
                 if section == host or self.__parser.get (section, 'address') == host:
                     self.__chosenSections.append (section)
         else:
-            self.__servers [host] = Server (host)
+            self.__servers [host] = Server (host, host, username, password)
 
     def chosenServers (self, choice):
         """Return servers for the given choice if they are in configuration, return all if configuration does not
@@ -597,6 +594,8 @@ class Motop:
         from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
         parser = ArgumentParser (formatter_class = ArgumentDefaultsHelpFormatter, description = self.__doc__)
         parser.add_argument ('hosts', metavar = 'host', nargs = '*', default = ['localhost:27017'])
+        parser.add_argument ('-u', '--username', dest = 'username')
+        parser.add_argument ('-p', '--password', dest = 'password')
         parser.add_argument ('-c', '--conf', dest = 'conf', default = Configuration.defaultFile)
         parser.add_argument ('-V', '--version', action = 'version', version = 'Motop ' + str (self.version))
         return parser.parse_args ()
@@ -608,7 +607,7 @@ class Motop:
         configuration = Configuration (arguments.conf)
         with Console () as console:
             for host in arguments.hosts:
-                configuration.addArgumentHost (host)
+                configuration.addArgumentHost (host, arguments.username, arguments.password)
             chosenServersForChoice = {}
             for choice in configuration.choices:
                 chosenServersForChoice [choice] = configuration.chosenServers (choice)
