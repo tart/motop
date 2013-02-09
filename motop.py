@@ -105,10 +105,14 @@ class Server:
     readPreference = pymongo.ReadPreference.SECONDARY
 
     def __connect (self):
-        if pymongo.version_tuple >= (2, 4):
-            self.__connection = pymongo.MongoClient (self.__address, read_preference = self.readPreference)
-        else:
-            self.__connection = pymongo.Connection (self.__address, read_preference = self.readPreference)
+        try:
+            if pymongo.version_tuple >= (2, 4):
+                self.__connection = pymongo.MongoClient (self.__address, read_preference = self.readPreference)
+            else:
+                self.__connection = pymongo.Connection (self.__address, read_preference = self.readPreference)
+        except pymongo.errors.AutoReconnect as error:
+            self.__connection = None
+            self.__lastError = error
         if self.__username and self.__password:
             self.__connection.admin.authenticate (self.__username, self.__password)
 
@@ -125,19 +129,26 @@ class Server:
     def __str__ (self):
         return self.__name
 
+    def connected (self):
+        return bool (self.__connection)
+
     def __execute (self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
         tryCount = 1
-        while True:
+        while tryCount < 10:
+            tryCount += 1
             try:
                 return procedure (*args, **kwargs)
-            except pymongo.errors.AutoReconnect:
-                tryCount += 1
-                if tryCount >= 10:
-                    raise ExecuteFailure (procedure)
+            except pymongo.errors.AutoReconnect as error:
+                self.__lastError = error
                 sleep (0.1)
-            except pymongo.errors.OperationFailure:
-                raise ExecuteFailure (procedure)
+            except pymongo.errors.OperationFailure as error:
+                self.__lastError = error
+                break
+        raise ExecuteFailure (procedure)
+
+    def lastError (self):
+        return self.__lastError
 
     def __statusChangePerSecond (self, name, value):
         """Calculate the difference of the value in one second with the last time by using time difference calculated
@@ -329,16 +340,19 @@ class StatusBlock (Block):
     def reset (self):
         lines = []
         for server in self.__servers:
-            status = server.status ()
             cells = []
             cells.append (server)
-            cells.append (status ['qPS'])
-            cells.append (status ['activeClients'])
-            cells.append (status ['currentQueue'])
-            cells.append (status ['flushes'])
-            cells.append ('{0} / {1}'.format (status ['currentConn'], status ['totalConn']))
-            cells.append ('{0} / {1}'.format (status ['residentMem'], status ['mappedMem']))
-            cells.append ('{0} / {1}'.format (status ['bytesIn'], status ['bytesOut']))
+            if server.connected ():
+                status = server.status ()
+                cells.append (status ['qPS'])
+                cells.append (status ['activeClients'])
+                cells.append (status ['currentQueue'])
+                cells.append (status ['flushes'])
+                cells.append ('{0} / {1}'.format (status ['currentConn'], status ['totalConn']))
+                cells.append ('{0} / {1}'.format (status ['residentMem'], status ['mappedMem']))
+                cells.append ('{0} / {1}'.format (status ['bytesIn'], status ['bytesOut']))
+            else:
+                cells.append (server.lastError ())
             lines.append (cells)
         Block.reset (self, lines)
 
@@ -355,15 +369,16 @@ class ReplicationInfoBlock (Block):
     def reset (self):
         lines = []
         for server in self.__servers:
-            replicationInfo = server.replicationInfo ()
-            if replicationInfo:
-                cells = []
-                cells.append (server)
-                cells.append (replicationInfo ['source'])
-                cells.append (replicationInfo ['syncedTo'])
-                lines.append (cells)
-            else:
-                self.__servers.remove (server)
+            if server.connected ():
+                replicationInfo = server.replicationInfo ()
+                if replicationInfo:
+                    cells = []
+                    cells.append (server)
+                    cells.append (replicationInfo ['source'])
+                    cells.append (replicationInfo ['syncedTo'])
+                    lines.append (cells)
+                else:
+                    self.__servers.remove (server)
         Block.reset (self, lines)
 
 class ReplicaSetMemberBlock (Block):
@@ -387,20 +402,21 @@ class ReplicaSetMemberBlock (Block):
     def reset (self):
         self.__lines = []
         for server in self.__servers:
-            replicaSetMembers = server.replicaSetMembers ()
-            if replicaSetMembers:
-                for member in replicaSetMembers:
-                    cells = []
-                    cells.append (member ['name'])
-                    cells.append (member ['set'])
-                    cells.append (member ['state'])
-                    cells.append (member ['uptime'])
-                    cells.append (member ['ping'])
-                    cells.append (member ['lag'])
-                    cells.append (member ['optime'])
-                    self.add (cells)
-            else:
-                self.__servers.remove (server)
+            if server.connected ():
+                replicaSetMembers = server.replicaSetMembers ()
+                if replicaSetMembers:
+                    for member in replicaSetMembers:
+                        cells = []
+                        cells.append (member ['name'])
+                        cells.append (member ['set'])
+                        cells.append (member ['state'])
+                        cells.append (member ['uptime'])
+                        cells.append (member ['ping'])
+                        cells.append (member ['lag'])
+                        cells.append (member ['optime'])
+                        self.add (cells)
+                else:
+                    self.__servers.remove (server)
         Block.reset (self, self.__lines)
 
 class Query:
@@ -466,20 +482,21 @@ class OperationBlock (Block):
     def reset (self):
         self.__lines = []
         for server in self.__servers:
-            hideReplicationOperations = server not in self.__replicationOperationServers
-            for operation in server.currentOperations (hideReplicationOperations):
-                cells = []
-                cells.append (server)
-                cells.append (operation ['opid'])
-                cells.append (operation ['state'])
-                cells.append (operation ['duration'])
-                cells.append (operation ['namespace'])
-                if operation ['query']:
-                    if '$msg' in operation ['query']:
-                        cells.append (operation ['query'] ['$msg'])
-                    else:
-                        cells.append (Query (**operation ['query']))
-                self.__lines.append (cells)
+            if server.connected ():
+                hideReplicationOperations = server not in self.__replicationOperationServers
+                for operation in server.currentOperations (hideReplicationOperations):
+                    cells = []
+                    cells.append (server)
+                    cells.append (operation ['opid'])
+                    cells.append (operation ['state'])
+                    cells.append (operation ['duration'])
+                    cells.append (operation ['namespace'])
+                    if operation ['query']:
+                        if '$msg' in operation ['query']:
+                            cells.append (operation ['query'] ['$msg'])
+                        else:
+                            cells.append (Query (**operation ['query']))
+                    self.__lines.append (cells)
         self.__lines.sort (key = lambda line: line [3] or -1, reverse = True)
         Block.reset (self, self.__lines)
 
