@@ -3,7 +3,7 @@
 from setuptools import setup
 
 setup (name = 'motop',
-        version = '1.0',
+        version = '1.1',
         author = 'Emre Hasegeli',
         author_email = 'hasegeli@tart.com.tr',
         scripts = ['motop.py'],
