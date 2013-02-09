@@ -62,19 +62,23 @@ class Block:
     def __len__ (self):
         return len (self.__lines)
 
-    def __printLine (self, line, width, bold = False):
+    def __printLine (self, line, leftWidth, bold = False):
         """Print the cells separated by 2 spaces, cut the part after the width."""
         for index, cell in enumerate (line):
-            if width < len (self.__columnHeaders [index]):
-                break
             cell = str (cell) if cell is not None else ''
-            self.__columnWidths [index] = min (width, max (len (cell) + 2, self.__columnWidths [index]))
+            if leftWidth < len (self.__columnHeaders [index]):
+                """Do not show the column if there is not enough space for the header."""
+                break
+            if index + 1 < len (line):
+                """Check the cell lenght if it is not the cell in the column. Set the column width to the cell lenght
+                plus 2 for space if it is longer than the exisent column width."""
+                self.__columnWidths [index] = max (len (cell) + 2, self.__columnWidths [index])
             if bold and sys.stdout.isatty ():
                 print ('\x1b[1m', end = '')
-            print (cell.ljust (self.__columnWidths [index]) [:self.__columnWidths [index]], end = '')
+            print (cell.ljust (self.__columnWidths [index]) [:leftWidth], end = '')
             if bold and sys.stdout.isatty ():
                 print ('\x1b[0m', end = '')
-            width -= self.__columnWidths [index]
+            leftWidth -= self.__columnWidths [index]
         print ()
 
     def print (self, height, width):
