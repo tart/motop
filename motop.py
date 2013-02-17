@@ -62,10 +62,17 @@ class Block:
     def __len__ (self):
         return len (self.__lines)
 
+    def __cell (self, value):
+        if isinstance (value, tuple):
+            return ' / '.join (self.__cell (value) for value in value)
+        if value is not None:
+            return str (value)
+        return ''
+
     def __printLine (self, line, leftWidth, bold = False):
         """Print the cells separated by 2 spaces, cut the part after the width."""
-        for index, cell in enumerate (line):
-            cell = str (cell) if cell is not None else ''
+        for index, value in enumerate (line):
+            cell = self.__cell (value)
             if leftWidth < len (self.__columnHeaders [index]):
                 """Do not show the column if there is not enough space for the header."""
                 break
@@ -194,6 +201,7 @@ class Server:
         for source in sources:
             values = {}
             values ['source'] = source ['host']
+            values ['sourceType'] = source ['source']
             syncedTo = source ['syncedTo']
             values ['syncedTo'] = syncedTo.as_datetime ()
             return values
@@ -352,9 +360,9 @@ class StatusBlock (Block):
                 cells.append (status ['activeClients'])
                 cells.append (status ['currentQueue'])
                 cells.append (status ['flushes'])
-                cells.append ('{0} / {1}'.format (status ['currentConn'], status ['totalConn']))
-                cells.append ('{0} / {1}'.format (status ['residentMem'], status ['mappedMem']))
-                cells.append ('{0} / {1}'.format (status ['bytesIn'], status ['bytesOut']))
+                cells.append ((status ['currentConn'], status ['totalConn']))
+                cells.append ((status ['residentMem'], status ['mappedMem']))
+                cells.append ((status ['bytesIn'], status ['bytesOut']))
             else:
                 cells.append (server.lastError ())
             lines.append (cells)
@@ -387,7 +395,7 @@ class ReplicationInfoBlock (ServerBasedBlock):
             if replicationInfo:
                 cells = []
                 cells.append (server)
-                cells.append (self.findServer (replicationInfo ['source']))
+                cells.append ((replicationInfo ['sourceType'], self.findServer (replicationInfo ['source'])))
                 cells.append (replicationInfo ['syncedTo'])
                 lines.append (cells)
             else:
