@@ -204,6 +204,7 @@ class Server:
             values ['sourceType'] = source ['source']
             syncedTo = source ['syncedTo']
             values ['syncedTo'] = syncedTo.as_datetime ()
+            values ['increment'] = syncedTo.inc
             return values
 
     def replicaSetMembers (self):
@@ -386,7 +387,7 @@ class ServerBasedBlock (Block):
         self.__hiddenServers.append (server)
 
 class ReplicationInfoBlock (ServerBasedBlock):
-    columnHeaders = ['Server', 'Source', 'SyncedTo']
+    columnHeaders = ['Server', 'Source', 'SyncedTo', 'Inc']
 
     def reset (self):
         lines = []
@@ -397,6 +398,7 @@ class ReplicationInfoBlock (ServerBasedBlock):
                 cells.append (server)
                 cells.append ((replicationInfo ['sourceType'], self.findServer (replicationInfo ['source'])))
                 cells.append (replicationInfo ['syncedTo'])
+                cells.append (replicationInfo ['increment'])
                 lines.append (cells)
             else:
                 self.hideServer (server)
