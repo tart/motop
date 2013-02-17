@@ -118,9 +118,7 @@ class Server:
 
     def __init__ (self, name, address, username, password):
         self.__name = name
-        self.__address = address or name
-        if ':' not in self.__address:
-            self.__address += ':' + str (self.defaultPort)
+        self.__address = address
         self.__username = username
         self.__password = password
         self.__oldValues = {}
@@ -128,6 +126,15 @@ class Server:
 
     def __str__ (self):
         return self.__name
+
+    def sameServer (self, name):
+        if self.__name == name:
+            return True
+        if self.__address == name:
+            return True
+        if ':' not in self.__address and self.__address + ':' + str (self.defaultPort) == name:
+            return True
+        return False
 
     def connected (self):
         return bool (self.__connection)
@@ -334,9 +341,6 @@ class StatusBlock (Block):
         Block.__init__ (self, self.columnHeaders)
         self.__servers = servers
 
-    def __len__ (self):
-        return len (self.__servers)
-
     def reset (self):
         lines = []
         for server in self.__servers:
@@ -356,37 +360,42 @@ class StatusBlock (Block):
             lines.append (cells)
         Block.reset (self, lines)
 
-class ReplicationInfoBlock (Block):
-    columnHeaders = ['Server', 'Source', 'SyncedTo']
-
+class ServerBasedBlock (Block):
     def __init__ (self, servers):
         Block.__init__ (self, self.columnHeaders)
         self.__servers = servers
+        self.__hiddenServers = []
 
-    def __len__ (self):
-        return len (self.__servers)
+    def findServer (self, name):
+        for server in self.__servers:
+            if server.sameServer (name):
+                return server
+
+    def connectedServers (self):
+        return [server for server in self.__servers if server.connected () and server not in self.__hiddenServers]
+
+    def hideServer (self, server):
+        self.__hiddenServers.append (server)
+
+class ReplicationInfoBlock (ServerBasedBlock):
+    columnHeaders = ['Server', 'Source', 'SyncedTo']
 
     def reset (self):
         lines = []
-        for server in self.__servers:
-            if server.connected ():
-                replicationInfo = server.replicationInfo ()
-                if replicationInfo:
-                    cells = []
-                    cells.append (server)
-                    cells.append (replicationInfo ['source'])
-                    cells.append (replicationInfo ['syncedTo'])
-                    lines.append (cells)
-                else:
-                    self.__servers.remove (server)
+        for server in self.connectedServers ():
+            replicationInfo = server.replicationInfo ()
+            if replicationInfo:
+                cells = []
+                cells.append (server)
+                cells.append (self.findServer (replicationInfo ['source']))
+                cells.append (replicationInfo ['syncedTo'])
+                lines.append (cells)
+            else:
+                self.hideServer (server)
         Block.reset (self, lines)
 
-class ReplicaSetMemberBlock (Block):
+class ReplicaSetMemberBlock (ServerBasedBlock):
     columnHeaders = ['Server', 'Set', 'State', 'Uptime', 'Lag', 'Inc', 'Ping']
-
-    def __init__ (self, servers):
-        Block.__init__ (self, self.columnHeaders)
-        self.__servers = servers
 
     def __add (self, line):
         """Merge same lines by revising the existent one."""
@@ -401,22 +410,21 @@ class ReplicaSetMemberBlock (Block):
 
     def reset (self):
         self.__lines = []
-        for server in self.__servers:
-            if server.connected ():
-                replicaSetMembers = server.replicaSetMembers ()
-                if replicaSetMembers:
-                    for member in replicaSetMembers:
-                        cells = []
-                        cells.append (member ['name'])
-                        cells.append (member ['set'])
-                        cells.append (member ['state'])
-                        cells.append (member ['uptime'])
-                        cells.append (member ['ping'])
-                        cells.append (member ['lag'])
-                        cells.append (member ['optime'])
-                        self.add (cells)
-                else:
-                    self.__servers.remove (server)
+        for server in self.connectedServers ():
+            replicaSetMembers = server.replicaSetMembers ()
+            if replicaSetMembers:
+                for member in replicaSetMembers:
+                    cells = []
+                    cells.append (self.findServer (member ['name']) or member ['name'])
+                    cells.append (member ['set'])
+                    cells.append (member ['state'])
+                    cells.append (member ['uptime'])
+                    cells.append (member ['ping'])
+                    cells.append (member ['lag'])
+                    cells.append (member ['optime'])
+                    self.add (cells)
+            else:
+                self.hideServer (server)
         Block.reset (self, self.__lines)
 
 class Query:
