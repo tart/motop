@@ -550,7 +550,7 @@ class OperationBlock (Block):
             server.killOperation (line [1])
 
 class QueryScreen:
-    def __init__ (self, console, chosenServers):
+    def __init__ (self, console, chosenServers, autoKillSeconds = None):
         self.__console = console
         self.__blocks = []
         self.__blocks.append (StatusBlock (chosenServers ['status']))
@@ -558,6 +558,7 @@ class QueryScreen:
         self.__blocks.append (ReplicaSetMemberBlock (chosenServers ['replicaSet']))
         self.__operationBlock = OperationBlock (chosenServers ['operations'], chosenServers ['replicationOperations'])
         self.__blocks.append (self.__operationBlock)
+        self.__autoKillSeconds = autoKillSeconds
 
     def action (self):
         """Reset the blocks, refresh the console, perform actions for the pressed button."""
@@ -575,6 +576,8 @@ class QueryScreen:
                 button = self.__console.checkButton ()
             if button == 'K':
                 self.__operationBlock.batchKill (*self.__console.askForInput ('Sec'))
+            if self.__autoKillSeconds is not None:
+                self.__operationBlock.batchKill (self.__autoKillSeconds)
 
 class Configuration:
     defaultFile = os.path.splitext (__file__) [0] + '.conf'
@@ -637,6 +640,8 @@ class Motop:
         parser.add_argument ('-c', '--conf', dest = 'conf', default = Configuration.defaultFile,
                 help = 'path of configuration file')
         parser.add_argument ('-V', '--version', action = 'version', version = 'Motop ' + str (self.version))
+        parser.add_argument ('-K', '--auto-kill', dest = 'autoKillSeconds',
+                help = 'seconds to kill operations automatically')
         return parser.parse_args ()
 
     def __init__ (self):
@@ -645,7 +650,8 @@ class Motop:
         arguments = self.parseArguments ()
         config = Configuration (arguments.conf, arguments.hosts, arguments.username, arguments.password)
         with Console () as console:
-            queryScreen = QueryScreen (console, {choice: config.chosenServers (choice) for choice in config.choices})
+            queryScreen = QueryScreen (console, {choice: config.chosenServers (choice) for choice in config.choices},
+                    autoKillSeconds = arguments.autoKillSeconds)
             try:
                 queryScreen.action ()
             except KeyboardInterrupt: pass
