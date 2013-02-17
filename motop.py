@@ -532,7 +532,7 @@ class OperationBlock (Block):
             server.killOperation (line [1])
 
 class QueryScreen:
-    def __init__ (self, console, **chosenServers):
+    def __init__ (self, console, chosenServers):
         self.__console = console
         self.__blocks = []
         self.__blocks.append (StatusBlock (chosenServers ['status']))
@@ -563,11 +563,10 @@ class Configuration:
     optionalVariables = ['username', 'password']
     choices = ['status', 'replicationInfo', 'replicaSet', 'operations', 'replicationOperations']
 
-    def __init__ (self, filePath):
-        """Parse the configuration file using the ConfigParser class from default Python library. Two attempts to
-        import the same class for Python 3 compatibility."""
-        self.__servers = {}
-        self.__chosenSections = []
+    def __init__ (self, filePath, hosts = [], username = None, password = None):
+        """Parse the configuration file using the ConfigParser class from default Python library. Merge the arguments
+        with the configuration variables."""
+        """Two attempts to import the same class for Python 3 compatibility."""
         try:
             from ConfigParser import SafeConfigParser
         except ImportError:
@@ -576,33 +575,32 @@ class Configuration:
         defaults += [(choice, 'on') for choice in self.choices]
         self.__parser = SafeConfigParser (dict (defaults))
         if self.__parser.read (filePath):
-            for section in self.__parser.sections ():
-                address = self.__parser.get (section, 'address')
-                username = self.__parser.get (section, 'username')
-                password = self.__parser.get (section, 'password')
-                self.__servers [section] = Server (section, address, username, password)
-
-    def addArgumentHost (self, host, username, password):
-        """Choose the server if it exists in the configuration, add servers from arguments if configuration does not
-        exists."""
-        if self.__parser.sections ():
-            for section in self.__parser.sections ():
-                if section == host or self.__parser.get (section, 'address') == host:
-                    self.__chosenSections.append (section)
+            self.__sections = []
+            for host in hosts:
+                for section in self.__parser.sections ():
+                    if section == host or self.__parser.get (section, 'address') == host:
+                        self.__sections.append (section)
+            if not self.__sections:
+                """If none of the hosts match the sections in the configuration, do not use hosts."""
+                self.__sections = self.__parser.sections ()
         else:
-            self.__servers [host] = Server (host, host, username, password)
+            self.__sections = hosts
+            self.__username = username
+            self.__password = password
 
     def chosenServers (self, choice):
         """Return servers for the given choice if they are in configuration, return all if configuration does not
         exists."""
         servers = []
-        for section, server in self.__servers.items ():
+        for section in self.__sections:
             if self.__parser.sections ():
                 if self.__parser.getboolean (section, choice):
-                    if not self.__chosenSections or section in self.__chosenSections:
-                        servers.append (server)
+                    address = self.__parser.get (section, 'address')
+                    username = self.__parser.get (section, 'username')
+                    password = self.__parser.get (section, 'password')
+                    servers.append (Server (section, address, username, password))
             else:
-                servers.append (server)
+                servers.append (Server (section, section, self.__username, self.__password))
         return servers
 
 class Motop:
@@ -627,14 +625,9 @@ class Motop:
         """Parse arguments and the configuration file. Activate console. Get servers from the configuration file or
         from arguments. Show the query screen."""
         arguments = self.parseArguments ()
-        configuration = Configuration (arguments.conf)
+        config = Configuration (arguments.conf, arguments.hosts, arguments.username, arguments.password)
         with Console () as console:
-            for host in arguments.hosts:
-                configuration.addArgumentHost (host, arguments.username, arguments.password)
-            chosenServersForChoice = {}
-            for choice in configuration.choices:
-                chosenServersForChoice [choice] = configuration.chosenServers (choice)
-            queryScreen = QueryScreen (console, **chosenServersForChoice)
+            queryScreen = QueryScreen (console, {choice: config.chosenServers (choice) for choice in config.choices})
             try:
                 queryScreen.action ()
             except KeyboardInterrupt: pass
