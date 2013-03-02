@@ -229,7 +229,7 @@ class OperationBlock (Block):
         second = int (second)
         for line in self.__lines:
             if line [3] < second:
-                """Do not look futher as the list is reverse ordered by seconds."""
+                """Do not look further as the list is reverse ordered by seconds."""
                 break
             server = line [0]
             server.killOperation (line [1])
@@ -254,13 +254,19 @@ class QueryScreen:
             self.__console.refresh (self.__blocks)
             button = self.__console.checkButton (1)
             while button in ('e', 'k'):
-                if button == 'e':
-                    self.__operationBlock.explainQuery (*self.__console.askForInput ('Server', 'Opid'))
-                elif button == 'k':
-                    self.__operationBlock.kill (*self.__console.askForInput ('Server', 'Opid'))
+                inputValues = self.__console.askForInput ('Server', 'Opid')
+                if not inputValues:
+                    break
+                if len (inputValues) == 2:
+                    if button == 'e':
+                        self.__operationBlock.explainQuery (*inputValues)
+                    elif button == 'k':
+                        self.__operationBlock.kill (*inputValues)
                 button = self.__console.checkButton ()
             if button == 'K':
-                self.__operationBlock.batchKill (*self.__console.askForInput ('Sec'))
+                inputValues = self.__console.askForInput ('Sec')
+                if inputValues:
+                    self.__operationBlock.batchKill (*inputValues)
             if self.__autoKillSeconds is not None:
                 self.__operationBlock.batchKill (self.__autoKillSeconds)
 
