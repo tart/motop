@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 from setuptools import setup
+from src.Motop import Motop
 
 setup (name = 'motop',
-        version = '1.3',
+        version = str (Motop.version),
         author = 'Emre Hasegeli',
         author_email = 'hasegeli@tart.com.tr',
         scripts = ['motop.py'],
