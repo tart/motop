@@ -225,11 +225,12 @@ class Server:
             values ['state'] = op ['op']
             values ['duration'] = op ['secs_running'] if 'secs_running' in op else None
             values ['namespace'] = op ['ns']
-            if isinstance (op ['query'], str) and op ['query'] [0] == '{' and op ['query'] [-1] == '}':
-                values ['query'] = json.loads (op ['query'], object_hook = json_util.object_hook)
-            else:
-                values ['query'] = op ['query']
-            yield values
+            if "query" in op:
+	            if isinstance (op ['query'], str) and op ['query'] [0] == '{' and op ['query'] [-1] == '}':
+	                values ['query'] = json.loads (op ['query'], object_hook = json_util.object_hook)
+	            else:
+	                values ['query'] = op ['query']
+	            yield values
 
     def explainQuery (self, namespace, findParameters):
         databaseName, collectionName = namespace.split ('.', 1)
