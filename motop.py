@@ -398,7 +398,8 @@ class ReplicationInfoBlock (ServerBasedBlock):
             if replicationInfo:
                 cells = []
                 cells.append (server)
-                cells.append ((replicationInfo ['sourceType'], self.findServer (replicationInfo ['source'])))
+                source = self.findServer (replicationInfo ['source']) or replicationInfo ['source']
+                cells.append ((replicationInfo ['sourceType'], source))
                 cells.append (replicationInfo ['syncedTo'])
                 cells.append (replicationInfo ['increment'])
                 lines.append (cells)
