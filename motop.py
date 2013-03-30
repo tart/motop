@@ -221,8 +221,9 @@ class Server:
                     values ['state'] = member ['stateStr']
                     values ['uptime'] = timedelta (seconds = member ['uptime']) if 'uptime' in member else None
                     values ['ping'] = member ['pingMs'] if 'pingMs' in member else None
-                    values ['lag'] = replicaSetStatus ['date'] - member ['optimeDate']
-                    values ['optime'] = member ['optime']
+                    if 'optime' in member and 'optimeDate' in member:
+                        values ['lag'] = replicaSetStatus ['date'] - member ['optimeDate']
+                        values ['optime'] = member ['optime']
                     yield values
 
     def currentOperations (self, hideReplicationOperations = False):
@@ -431,8 +432,10 @@ class ReplicaSetMemberBlock (ServerBasedBlock):
                     cells.append (member ['state'])
                     cells.append (member ['uptime'])
                     cells.append (member ['ping'])
-                    cells.append (member ['lag'])
-                    cells.append (member ['optime'])
+                    if 'lag' in member:
+                        cells.append (member ['lag'])
+                    if 'optime' in member:
+                        cells.append (member ['optime'])
                     self.add (cells)
             else:
                 self.hideServer (server)
