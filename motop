@@ -1,5 +1,5 @@
 #!/usr/bin/env python
 
-from src.Motop import Motop
+from libmotop.Motop import Motop
 Motop ()
 

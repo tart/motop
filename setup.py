@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
 from setuptools import setup
-from src.Motop import Motop
+from libmotop.Motop import Motop
 
 setup (name = 'motop',
         version = str (Motop.version),
+        packages = ['libmotop'],
+        scripts = ['motop'],
         author = 'Emre Hasegeli',
         author_email = 'hasegeli@tart.com.tr',
-        scripts = ['motop'],
         license = 'ICS',
         url = 'https://github.com/tart/motop',
         description = 'Realtime monitoring tool for several MongoDB servers.',
