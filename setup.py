@@ -17,7 +17,6 @@ setup (name = 'motop',
         license = 'ICS',
         url = 'https://github.com/tart/motop',
         platforms = 'POSIX',
-        description = 'Realtime monitoring tool for several MongoDB servers.',
+        description = '"Top" clone for MongoDB.',
         keywords = 'mongo realtime monitoring examine explain kill operations',
         long_description = readme ())
-
