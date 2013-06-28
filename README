@@ -4,6 +4,15 @@ motop
 Realtime monitoring tool for several MongoDB servers. Shows current
 operations ordered by durations every second.
 
+
+Installation
+------------
+
+easy_intall motop
+
+./setup.py install
+
+
 Actions
 -------
 
