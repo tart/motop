@@ -46,18 +46,18 @@ username                The username to authenticate to the server
 
 password                The password to authenticate to the server
 
-status                  Paramer to show status for the server (default: on)
+status                  Parameter to show status for the server (default: on)
 
-replicationInfo         Paramer to show replication info for the server
+replicationInfo         Parameter to show replication info for the server
                         (default: on)
 
-replicaSet              Paramer to show replica set status for the server
+replicaSet              Parameter to show replica set status for the server
                         (default: on)
 
-operations              Paramer to show operations for the server
+operations              Parameter to show operations for the server
                         (default: on)
 
-replicationOperations   Paramer to show constantly appeared replication
+replicationOperations   Parameter to show constantly appeared replication
                         operations on the masters and the slaves
                         (default: on)
 
