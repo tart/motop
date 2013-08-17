@@ -32,6 +32,7 @@ import fcntl
 import select
 import signal
 import time
+from datetime import datetime
 
 class DeactiveConsole ():
     """Class to use with "with" statement as "wihout" statement for Console class defined below."""
@@ -50,6 +51,7 @@ class Console:
         self.__deactiveConsole = DeactiveConsole (self)
         self.__saveSize ()
         signal.signal (signal.SIGWINCH, self.__saveSize)
+        self.__lastCheckTime = None
 
     def __enter__ (self):
         """Hide pressed buttons on the console."""
@@ -73,13 +75,17 @@ class Console:
     def checkButton (self, waitTime = None):
         """Check one character input. Waits for approximately waitTime parameter as seconds. Wait for input if no
         parameter given."""
-        if waitTime:
-            while waitTime > 0:
-                waitTime -= 0.1
-                time.sleep (0.1)
-                if select.select ([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
-                    return sys.stdin.read (1)
-        else:
+        if not waitTime:
+            """Wait for input."""
+            return sys.stdin.read (1)
+        if self.__lastCheckTime:
+            timedelta = datetime.now () - self.__lastCheckTime
+            waitTime -= timedelta.seconds + (timedelta.microseconds / 1000000.0)
+        while waitTime > 0 and not select.select ([sys.stdin], [], [], 0) [0]:
+            time.sleep (0.1)
+            waitTime -= 0.1
+        self.__lastCheckTime = datetime.now ()
+        if select.select ([sys.stdin], [], [], 0) [0]:
             return sys.stdin.read (1)
 
     def refresh (self, blocks):
