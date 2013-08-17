@@ -5,12 +5,24 @@ Realtime monitoring tool for several MongoDB servers. Shows current
 operations ordered by durations every second.
 
 
-Installation
-------------
+Usage
+-----
 
-easy_intall motop
+Install with easy_install::
 
-./setup.py install
+    easy_intall motop
+
+Download and install::
+
+    ./setup.py install
+
+Help::
+
+    motop -h
+
+Monitor several servers::
+
+    motop 192.168.124.50 192.158.124.51
 
 
 Actions
