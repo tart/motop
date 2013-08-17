@@ -20,3 +20,4 @@ setup (name = 'motop',
         description = '"Top" clone for MongoDB.',
         keywords = 'mongo realtime monitoring examine explain kill operations',
         long_description = readme ())
+

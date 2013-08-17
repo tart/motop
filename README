@@ -24,6 +24,7 @@ k   Kill operation using "mongo" executable
 
 K   Kill operations older than given seconds using "mongo" executable
 
+
 Dependencies
 ------------
 
@@ -32,34 +33,55 @@ Dependencies
 
 [1] http://pypi.python.org/pypi/pymongo/
 
-Configuration
--------------
 
-Configuration file can be created by copying motop.default.conf to
-motop.conf. Section are used for servers. DEFAULT section can be used
-for all servers. Servers in the configuration can be filtered with
-arguments.
+Configuration (Optional)
+------------------------
 
-address                 The address of the server
+Configuration file can be created to /etc/motop.conf.
 
-username                The username to authenticate to the server
+There can be multiple sections on the configuration. Each section
+can include these parameters::
 
-password                The password to authenticate to the server
+    address                 Address of the server (required)
 
-status                  Parameter to show status for the server (default: on)
+    username                Username to authenticate to the server
 
-replicationInfo         Parameter to show replication info for the server
-                        (default: on)
+    password                Password to authenticate to the server
 
-replicaSet              Parameter to show replica set status for the server
-                        (default: on)
+    status                  Show status (default: on)
 
-operations              Parameter to show operations for the server
-                        (default: on)
+    replicationInfo         Show replication status (default: on)
 
-replicationOperations   Parameter to show constantly appeared replication
-                        operations on the masters and the slaves
-                        (default: on)
+    replicaSet              Show replica set status (default: on)
+
+    operations              Show operations (default: on)
+
+    replicationOperations   Show constantly appeared replication operations
+                            on the masters and the slaves (default: on)
+
+"DEFAULT" is the special section. Parameters can be set as default
+in this section.
+
+The names of the sections will be used as server names. These names
+can alse be used on arguments of the executable.
+
+Example configuration::
+
+    [MongoDB01]
+    address=10.42.2.121
+    replicationOperations=off
+
+    [MongoDB02]
+    address=10.42.2.122
+
+    [MongoDB03]
+    address=10.42.2.123
+
+    [MongoDB04]
+    address=10.42.2.124
+    username=foo
+    password=bar
+
 
 License
 -------
