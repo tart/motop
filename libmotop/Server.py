@@ -126,10 +126,12 @@ class Server:
         values ['flushes'] = self.__statusChangePerSecond ('flushes', status ['backgroundFlushing'] ['flushes'])
         values ['currentConn'] = Value (status ['connections'] ['current'])
         values ['totalConn'] = Value (status ['connections'] ['available'] + status ['connections'] ['current'])
-        values ['residentMem'] = Value (status ['mem'] ['resident'] * (10 ** 6))
-        values ['mappedMem'] = Value (status ['mem'] ['mapped'] * (10 ** 6))
         values ['bytesIn'] = self.__statusChangePerSecond ('bytesIn', status ['network'] ['bytesIn'])
         values ['bytesOut'] = self.__statusChangePerSecond ('bytesOut', status ['network'] ['bytesOut'])
+        values ['residentMem'] = Value (status ['mem'] ['resident'] * (10 ** 6))
+        values ['mappedMem'] = Value (status ['mem'] ['mapped'] * (10 ** 6))
+        if 'page_faults' in status ['extra_info']:
+            values ['pageFault'] = self.__statusChangePerSecond ('pageFault', status ['extra_info'] ['page_faults'])
         return values
 
     def replicationInfo (self):

@@ -26,7 +26,7 @@ from bson import json_util
 from .Block import Block
 
 class StatusBlock (Block):
-    columnHeaders = ['Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Memory', 'Network I/O']
+    columnHeaders = ['Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Network I/O', 'Memory', 'Page Faults']
 
     def __init__ (self, servers):
         Block.__init__ (self, self.columnHeaders)
@@ -44,8 +44,10 @@ class StatusBlock (Block):
                 cells.append (status ['currentQueue'])
                 cells.append (status ['flushes'])
                 cells.append ((status ['currentConn'], status ['totalConn']))
-                cells.append ((status ['residentMem'], status ['mappedMem']))
                 cells.append ((status ['bytesIn'], status ['bytesOut']))
+                cells.append ((status ['residentMem'], status ['mappedMem']))
+                if 'pageFault' in status:
+                    cells.append (status ['pageFault'])
             else:
                 cells.append (server.lastError ())
             lines.append (cells)
