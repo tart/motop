@@ -26,7 +26,7 @@ from bson import json_util
 from .Block import Block
 
 class StatusBlock (Block):
-    columnHeaders = ['Server', 'QPS', 'Client', 'Queue', 'Flush', 'Connection', 'Network I/O', 'Memory', 'Page Faults']
+    columnHeaders = ['Server', 'QPS', 'Active', 'Queue', 'Flush', 'Connection', 'Network I/O', 'Memory', 'Page Faults']
 
     def __init__ (self, servers):
         Block.__init__ (self, self.columnHeaders)
