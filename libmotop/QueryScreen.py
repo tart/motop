@@ -177,7 +177,7 @@ class Query:
             print ('ScanAndOrder:', explainOutput ['scanAndOrder'])
 
 class OperationBlock (Block):
-    columnHeaders = ['Server', 'Opid', 'State', 'Sec', 'Namespace', 'Query']
+    columnHeaders = ['Server', 'Client', 'Opid', 'State', 'Sec', 'Namespace', 'Query']
 
     def __init__ (self, servers, replicationOperationServers):
         Block.__init__ (self, self.columnHeaders)
@@ -192,6 +192,7 @@ class OperationBlock (Block):
                 for operation in server.currentOperations (hideReplicationOperations):
                     cells = []
                     cells.append (server)
+                    cells.append (operation ['client'])
                     cells.append (operation ['opid'])
                     cells.append (operation ['state'])
                     cells.append (operation ['duration'])

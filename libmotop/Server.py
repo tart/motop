@@ -177,6 +177,7 @@ class Server:
                     operations if one found."""
                     continue
             values = {}
+            values ['client'] = op ['client']
             values ['opid'] = op ['opid']
             values ['state'] = op ['op']
             values ['duration'] = op ['secs_running'] if 'secs_running' in op else None
