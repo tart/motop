@@ -197,7 +197,7 @@ class OperationBlock (Block):
                     cells.append (operation ['state'])
                     cells.append (operation ['duration'])
                     cells.append (operation ['namespace'])
-                    if operation ['query']:
+                    if 'query' in operation:
                         if '$msg' in operation ['query']:
                             cells.append (operation ['query'] ['$msg'])
                         else:
