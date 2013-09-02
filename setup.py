@@ -4,7 +4,7 @@ from setuptools import setup
 from libmotop.Motop import Motop
 
 def readme ():
-    with open ('README') as readmeFile:
+    with open ('README.md') as readmeFile:
         return readmeFile.read ()
 
 setup (name = 'motop',
