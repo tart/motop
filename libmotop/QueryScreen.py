@@ -203,7 +203,7 @@ class OperationBlock (Block):
                         else:
                             cells.append (Query (**operation ['query']))
                     self.__lines.append (cells)
-        self.__lines.sort (key = lambda line: line [3] or -1, reverse = True)
+        self.__lines.sort (key = lambda line: line [4] or -1, reverse = True)
         Block.reset (self, self.__lines)
 
     def __findServer (self, serverName):
@@ -218,10 +218,10 @@ class OperationBlock (Block):
 
     def explainQuery (self, *parameters):
         line = self.__findLine (*parameters)
-        if line [4] and line [5] and isinstance (line [5], Query):
-            query = line [5]
+        if len(line) > 4 and line [4] and isinstance (line [6], Query):
+            query = line [6]
             query.print ()
-            query.printExplain (line [0], line [4])
+            query.printExplain (line [0], line [5])
 
     def kill (self, serverName, opid):
         server = self.__findServer (serverName)
@@ -231,7 +231,7 @@ class OperationBlock (Block):
         """Kill operations running more than given seconds from top to bottom."""
         second = int (second)
         for line in self.__lines:
-            if line [3] < second:
+            if line [4] < second:
                 """Do not look further as the list is reverse ordered by seconds."""
                 break
             server = line [0]
