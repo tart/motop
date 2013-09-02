@@ -75,7 +75,7 @@ class Configuration:
 class Motop:
     """Realtime monitoring tool for several MongoDB servers. Shows current operations ordered by durations every
     second."""
-    version = 2.2
+    version = 2.3
 
     def parseArguments (self):
         """Create ArgumentParser instance. Return parsed arguments."""
