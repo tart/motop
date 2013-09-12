@@ -30,6 +30,8 @@ Actions
 
 q   Quit
 
+p   Pause
+
 e   Explain the query
 
 k   Kill operation using "mongo" executable

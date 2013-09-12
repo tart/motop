@@ -256,16 +256,23 @@ class QueryScreen:
                 block.reset ()
             self.__console.refresh (self.__blocks)
             button = self.__console.checkButton (1)
-            while button in ('e', 'k'):
-                inputValues = self.__console.askForInput ('Server', 'Opid')
-                if not inputValues:
-                    break
-                if len (inputValues) == 2:
-                    if button == 'e':
-                        self.__operationBlock.explainQuery (*inputValues)
-                    elif button == 'k':
-                        self.__operationBlock.kill (*inputValues)
+
+            "Pause:"
+            if button == 'p':
                 button = self.__console.checkButton ()
+
+            "Single operation actions:"
+            if button in ('e', 'k'):
+                inputValues = self.__console.askForInput ('Server', 'Opid')
+                if inputValues:
+                    if len (inputValues) == 2:
+                        if button == 'e':
+                            self.__operationBlock.explainQuery (*inputValues)
+                        elif button == 'k':
+                            self.__operationBlock.kill (*inputValues)
+                    button = self.__console.checkButton ()
+
+            "Batch kill actions:"
             if button == 'K':
                 inputValues = self.__console.askForInput ('Sec')
                 if inputValues:
