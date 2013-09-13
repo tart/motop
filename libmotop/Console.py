@@ -100,11 +100,13 @@ class Console:
                 """Do not show the block if there are not enough lines left for header and a row."""
                 break
             height = len (block) + 2 if len (block) + 2 < leftHeight else leftHeight
-            block.print (height, self.__width)
-            leftHeight -= height
-            if leftHeight >= 2:
-                print ()
-                leftHeight -= 1
+            try:
+                block.print (height, self.__width)
+                leftHeight -= height
+                if leftHeight >= 2:
+                    print ()
+                    leftHeight -= 1
+            except IOError: pass
 
     def askForInput (self, *attributes):
         """Ask for input for given attributes in given order."""
