@@ -261,7 +261,7 @@ class QueryScreen:
 
             "Pause:"
             if button == 'p':
-                button = self.__console.checkButton ()
+                button = self.__console.waitButton ()
 
             "Single operation actions:"
             if button in ('e', 'k'):
@@ -272,7 +272,7 @@ class QueryScreen:
                             self.__operationBlock.explainQuery (*inputValues)
                         elif button == 'k':
                             self.__operationBlock.kill (*inputValues)
-                    button = self.__console.checkButton ()
+                    button = self.__console.waitButton ()
 
             "Batch kill actions:"
             if button == 'K':

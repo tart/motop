@@ -72,12 +72,14 @@ class Console:
         except IOError:
             self.__height, self.__width = 20, 80
 
-    def checkButton (self, waitTime = None):
-        """Check one character input. Waits for approximately waitTime parameter as seconds. Wait for input if no
-        parameter given."""
-        if not waitTime:
-            """Wait for input."""
-            return sys.stdin.read (1)
+    def waitButton (self):
+        while True:
+            try:
+                return sys.stdin.read (1)
+            except IOError: pass
+
+    def checkButton (self, waitTime):
+        """Check one character input. Waits for approximately waitTime parameter as seconds."""
         if self.__lastCheckTime:
             timedelta = datetime.now () - self.__lastCheckTime
             waitTime -= timedelta.seconds + (timedelta.microseconds / 1000000.0)
