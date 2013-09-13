@@ -37,13 +37,6 @@ class Value (int):
             return str (int (round (self / 10 ** 3))) + 'K'
         return int.__str__ (self)
 
-class ExecuteFailure (Exception):
-    def __init__ (self, procedure):
-        self.__procedure = procedure
-
-    def __str__ (self):
-        return str (self.__procedure)
-
 class Server:
     defaultPort = 27017
     readPreference = pymongo.ReadPreference.SECONDARY
@@ -85,9 +78,7 @@ class Server:
 
     def __execute (self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
-        tryCount = 1
-        while tryCount < 10:
-            tryCount += 1
+        for tryCount in range (10):
             try:
                 return procedure (*args, **kwargs)
             except pymongo.errors.AutoReconnect as error:
@@ -95,8 +86,15 @@ class Server:
                 time.sleep (0.1)
             except pymongo.errors.OperationFailure as error:
                 self.__lastError = error
-                break
-        raise ExecuteFailure (procedure)
+                raise
+
+    def __executeYield (self, *args, **kwargs):
+        """Execute the procedure and yield items until get next item fails."""
+        try:
+            for item in self.__execute (*args, **kwargs):
+                yield item
+        except pymongo.errors.AutoReconnect as error:
+            self.__lastError = error
 
     def lastError (self):
         return self.__lastError
@@ -136,8 +134,7 @@ class Server:
 
     def replicationInfo (self):
         """Find replication source from the local collection."""
-        sources = self.__execute (self.__connection.local.sources.find)
-        for source in sources:
+        for source in self.__executeYield (self.__connection.local.sources.find):
             values = {}
             values ['source'] = source ['host']
             values ['sourceType'] = source ['source']
@@ -151,7 +148,7 @@ class Server:
         member which is the server itself. Return the replica set."""
         try:
             replicaSetStatus = self.__execute (self.__connection.admin.command, 'replSetGetStatus')
-        except ExecuteFailure: pass
+        except pymongo.errors.OperationFailure: pass
         else:
             for member in replicaSetStatus ['members']:
                 if 'statusStr' not in member or member ['statusStr'] not in ['ARBITER']:
