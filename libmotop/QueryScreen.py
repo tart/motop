@@ -160,6 +160,7 @@ class Query:
     def printExplain (self, server, namespace):
         """Print the output of the explain command executed on the server."""
         explainOutput = server.explainQuery (namespace, self.__parts)
+        print ()
         print ('Cursor:', explainOutput ['cursor'])
         print ('Indexes:', end = ' ')
         for index in explainOutput ['indexBounds']:
@@ -218,8 +219,9 @@ class OperationBlock (Block):
 
     def explainQuery (self, *parameters):
         line = self.__findLine (*parameters)
-        if len(line) > 4 and line [4] and isinstance (line [6], Query):
+        if len(line) > 5 and line [5] and isinstance (line [6], Query):
             query = line [6]
+            print(query)
             query.print ()
             query.printExplain (line [0], line [5])
 
