@@ -10,7 +10,7 @@ Usage
 
 Install with easy_install::
 
-    easy_intall motop
+    easy_install motop
 
 Download and install::
 
