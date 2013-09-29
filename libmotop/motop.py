@@ -28,7 +28,7 @@ except ImportError:
 
 """Metadata"""
 __name__ = 'motop'
-__version__ = 2.4
+__version__ = 3.0
 __doc__ = '"Top" clone for MongoDB.'
 
 """Main configuration"""
