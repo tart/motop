@@ -1,4 +1,4 @@
-motop
+Motop
 =====
 
 Realtime monitoring tool for several MongoDB servers. Shows current
