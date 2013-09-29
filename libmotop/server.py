@@ -28,6 +28,14 @@ class Server:
     defaultPort = 27017
     readPreference = pymongo.ReadPreference.SECONDARY
 
+    def __init__(self, name, address, username=None, password=None):
+        self.__name = name
+        self.__address = address
+        self.__username = username
+        self.__password = password
+        self.__oldValues = {}
+        self.__connect()
+
     def __connect(self):
         try:
             if pymongo.version_tuple >= (2, 4):
@@ -39,14 +47,6 @@ class Server:
             self.__lastError = error
         if self.__username and self.__password:
             self.__connection.admin.authenticate(self.__username, self.__password)
-
-    def __init__(self, name, address, username, password):
-        self.__name = name
-        self.__address = address
-        self.__username = username
-        self.__password = password
-        self.__oldValues = {}
-        self.__connect()
 
     def __str__(self):
         return self.__name
