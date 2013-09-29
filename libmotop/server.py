@@ -196,13 +196,13 @@ class Server:
 class Value(int):
     """Class extents int to show big numbers human readable."""
     def __str__(self):
-        if self > 10**12:
+        if self > 10**13:
             return str(int(round(self / 10**12))) + 'T'
-        if self > 10**9:
+        if self > 10**10:
             return str(int(round(self / 10**9))) + 'G'
-        if self > 10**6:
+        if self > 10**7:
             return str(int(round(self / 10**6))) + 'M'
-        if self > 10**3:
+        if self > 10**4:
             return str(int(round(self / 10**3))) + 'k'
         return int.__str__(self)
 
