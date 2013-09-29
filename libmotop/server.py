@@ -203,6 +203,6 @@ class Value(int):
         if self > 10**6:
             return str(int(round(self / 10**6))) + 'M'
         if self > 10**3:
-            return str(int(round(self / 10**3))) + 'K'
+            return str(int(round(self / 10**3))) + 'k'
         return int.__str__(self)
 
