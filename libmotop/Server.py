@@ -152,6 +152,7 @@ class Server:
         else:
             for member in replicaSetStatus ['members']:
                 if 'statusStr' not in member or member ['statusStr'] not in ['ARBITER']:
+                    values = {}
                     values ['set'] = replicaSetStatus ['set']
                     values ['name'] = member ['name']
                     values ['state'] = member ['stateStr']
