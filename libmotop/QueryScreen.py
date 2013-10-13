@@ -119,7 +119,7 @@ class ReplicaSetMemberBlock (ServerBasedBlock):
                         cells.append (member ['lag'])
                     if 'optime' in member:
                         cells.append (member ['optime'])
-                    self.add (cells)
+                    self.__lines.append (cells)
             else:
                 self.hideServer (server)
         Block.reset (self, self.__lines)
