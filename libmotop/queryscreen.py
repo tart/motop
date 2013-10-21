@@ -190,7 +190,7 @@ class Query:
             print('ScanAndOrder:', explainOutput['scanAndOrder'])
 
 class OperationBlock(Block):
-    columnHeaders = ('Server', 'Opid', 'Client', 'Type', 'Sec', 'Namespace', 'Query')
+    columnHeaders = ('Server', 'Opid', 'Client', 'Type', 'Sec', 'Locks', 'Namespace', 'Query')
 
     def __init__(self, servers, replicationOperationServers):
         Block.__init__(self, self.columnHeaders)
@@ -210,6 +210,21 @@ class OperationBlock(Block):
                     cells.append(operation['client'] if 'client' in operation else '')
                     cells.append(operation['op'] if 'op' in operation else '')
                     cells.append(operation['secs_running'] if 'secs_running' in operation else '')
+
+                    locks = []
+                    if 'waitingForLock' in operation and operation['waitingForLock']:
+                        locks.append('waiting')
+                    if 'locks' in operation:
+                        if '^' in operation['locks']:
+                            """Do not show others if global lock exist."""
+                            locks.append(operation['locks']['^'])
+                        else:
+                            for ns, lock in operation['locks'].items():
+                                locks.append(lock + ' on ' + ns[1:])
+                    elif 'lockType' in operation:
+                        locks.append(operation['lockType'])
+
+                    cells.append(locks)
                     cells.append(operation['ns'] if 'ns' in operation else '')
                     if 'query' in operation:
 
@@ -236,11 +251,11 @@ class OperationBlock(Block):
 
     def explainQuery(self, *parameters):
         line = self.__findLine(*parameters)
-        if len(line) > 5 and line[5] and isinstance(line[6], Query):
-            query = line[6]
+        if len(line) > 6 and line[6] and isinstance(line[7], Query):
+            query = line[7]
             print(query)
             query.print()
-            query.printExplain(line[0], line[5])
+            query.printExplain(line[0], line[6])
 
     def kill(self, serverName, opid):
         server = self.__findServer(serverName)

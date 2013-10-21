@@ -137,7 +137,7 @@ class Block:
         return len(self.__lines)
 
     def __cell(self, value):
-        if isinstance(value, tuple):
+        if isinstance(value, tuple) or isinstance(value, list):
             return ' / '.join(self.__cell(value) for value in value)
         if value is not None:
             return str(value)

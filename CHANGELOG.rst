@@ -14,4 +14,5 @@ Motop 3.1
 
 * Avoid crash for operations with missing fields
 * Rename column State of the operation block.
+* Show locks with operations.
 
