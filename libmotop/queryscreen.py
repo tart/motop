@@ -190,7 +190,7 @@ class Query:
             print('ScanAndOrder:', explainOutput['scanAndOrder'])
 
 class OperationBlock(Block):
-    columnHeaders = ('Server', 'Opid', 'Client', 'State', 'Sec', 'Namespace', 'Query')
+    columnHeaders = ('Server', 'Opid', 'Client', 'Type', 'Sec', 'Namespace', 'Query')
 
     def __init__(self, servers, replicationOperationServers):
         Block.__init__(self, self.columnHeaders)
