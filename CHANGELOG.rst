@@ -9,3 +9,8 @@ Motop 3.0
 * Improve human readable values
 * Fix replica set monitoring (UdjinM6)
 
+Motop 3.1
+---------
+
+* Avoid crash for operations with missing fields
+

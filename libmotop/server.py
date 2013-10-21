@@ -19,9 +19,7 @@
 import os
 import sys
 import time
-import json
 import pymongo
-from bson import json_util
 from datetime import datetime, timedelta
 
 class Server:
@@ -162,19 +160,7 @@ class Server:
                     """Condition to find replication operation on the slave. Do not look for more replication
                     operations if one found."""
                     continue
-
-            values = {}
-            values['client'] = op['client']
-            values['opid'] = op['opid']
-            values['state'] = op['op']
-            values['duration'] = op['secs_running'] if 'secs_running' in op else None
-            values['namespace'] = op['ns']
-            if 'query' in op:
-                if isinstance(op['query'], str) and op['query'][0] == '{' and op['query'][-1] == '}':
-                    values['query'] = json.loads(op['query'], object_hook=json_util.object_hook)
-                else:
-                    values['query'] = op['query']
-            yield values
+            yield op
 
     def explainQuery(self, namespace, findParameters):
         databaseName, collectionName = namespace.split('.', 1)

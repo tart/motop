@@ -169,9 +169,9 @@ class Query:
             else:
                 print(value)
 
-    def printExplain(self, server, namespace):
+    def printExplain(self, server, ns):
         """Print the output of the explain command executed on the server."""
-        explainOutput = server.explainQuery(namespace, self.__parts)
+        explainOutput = server.explainQuery(ns, self.__parts)
         print()
         print('Cursor:', explainOutput['cursor'])
         print('Indexes:', end=' ')
@@ -206,12 +206,13 @@ class OperationBlock(Block):
                 for operation in server.currentOperations(hideReplicationOperations):
                     cells = []
                     cells.append(server)
-                    cells.append(operation['opid'])
-                    cells.append(operation['client'])
-                    cells.append(operation['state'])
-                    cells.append(operation['duration'])
-                    cells.append(operation['namespace'])
+                    cells.append(operation['opid'] if 'opid' in operation else '')
+                    cells.append(operation['client'] if 'client' in operation else '')
+                    cells.append(operation['op'] if 'op' in operation else '')
+                    cells.append(operation['secs_running'] if 'secs_running' in operation else '')
+                    cells.append(operation['ns'] if 'ns' in operation else '')
                     if 'query' in operation:
+
                         if '$msg' in operation['query']:
                             cells.append(operation['query']['$msg'])
                         else:
