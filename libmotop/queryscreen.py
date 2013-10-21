@@ -172,6 +172,9 @@ class Query:
     def printExplain(self, server, ns):
         """Print the output of the explain command executed on the server."""
         explainOutput = server.explainQuery(ns, self.__parts)
+        if not explainOutput:
+            return False
+
         print()
         print('Cursor:', explainOutput['cursor'])
         print('Indexes:', end=' ')
@@ -188,6 +191,8 @@ class Query:
         print('ScannedObjects:', explainOutput['nscannedObjects'])
         if 'scanAndOrder' in explainOutput:
             print('ScanAndOrder:', explainOutput['scanAndOrder'])
+
+        return True
 
 class OperationBlock(Block):
     columnHeaders = ('Server', 'Opid', 'Client', 'Type', 'Sec', 'Locks', 'Namespace', 'Query')
@@ -251,14 +256,14 @@ class OperationBlock(Block):
 
     def explainQuery(self, *parameters):
         line = self.__findLine(*parameters)
-        if len(line) > 6 and line[6] and isinstance(line[7], Query):
+        if line and len(line) > 6 and line[6] and isinstance(line[7], Query):
             query = line[7]
             query.print()
-            query.printExplain(line[0], line[6])
+            return query.printExplain(line[0], line[6])
 
     def kill(self, serverName, opid):
         server = self.__findServer(serverName)
-        server.killOperation(opid)
+        return server.killOperation(opid)
 
     def batchKill(self, second):
         """Kill operations running more than given seconds from top to bottom."""
@@ -302,9 +307,11 @@ class QueryScreen:
                 if inputValues:
                     if len(inputValues) == 2:
                         if button == 'e':
-                            self.__operationBlock.explainQuery(*inputValues)
+                            if not self.__operationBlock.explainQuery(*inputValues):
+                                print('Explain failed. Try again.')
                         elif button == 'k':
-                            self.__operationBlock.kill(*inputValues)
+                            if not self.__operationBlock.kill(*inputValues):
+                                print('Kill failed. Try again.')
                     button = self.__console.waitButton()
 
             "Batch kill actions:"

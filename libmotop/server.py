@@ -177,7 +177,9 @@ class Server:
             command += ' --username ' + self.__username
         if self.__password:
             command += ' --password ' + self.__password
-        os.system(command)
+
+        exitCode = os.system(command)
+        return exitCode == 0
 
 class Value(int):
     """Class extents int to show big numbers human readable."""
