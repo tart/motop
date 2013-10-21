@@ -56,22 +56,30 @@ Configuration file can be created to /etc/motop.conf.
 There can be multiple sections on the configuration. Each section
 can include these parameters::
 
-    address                 Address of the server (required)
+address
+    Address of the server (required)
 
-    username                Username to authenticate to the server
+username
+    Username to authenticate to the server
 
-    password                Password to authenticate to the server
+password
+    Password to authenticate to the server
 
-    status                  Show status (default: on)
+status
+    Show status (default: on)
 
-    replicationInfo         Show replication status (default: on)
+replicationInfo
+    Show replication status (default: on)
 
-    replicaSet              Show replica set status (default: on)
+replicaSet
+    Show replica set status (default: on)
 
-    operations              Show operations (default: on)
+operations
+    Show operations (default: on)
 
-    replicationOperations   Show constantly appeared replication operations
-                            on the masters and the slaves (default: on)
+replicationOperations
+    Show constantly appeared replication operations on the masters
+    and the slaves (default: on)
 
 "DEFAULT" is the special section. Parameters can be set as default
 in this section.
