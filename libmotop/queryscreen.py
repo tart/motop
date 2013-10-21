@@ -253,7 +253,6 @@ class OperationBlock(Block):
         line = self.__findLine(*parameters)
         if len(line) > 6 and line[6] and isinstance(line[7], Query):
             query = line[7]
-            print(query)
             query.print()
             query.printExplain(line[0], line[6])
 
