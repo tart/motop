@@ -31,6 +31,7 @@ class StatusBlock(Block):
     def __init__(self, servers):
         Block.__init__(self, self.columnHeaders)
         self.__servers = servers
+        self.__oldStatus = {}
 
     def reset(self):
         lines = []
@@ -40,15 +41,25 @@ class StatusBlock(Block):
             cells.append(server)
             if server.connected():
                 status = server.status()
-                cells.append(status['qPS'])
-                cells.append(status['activeClients'])
-                cells.append(status['currentQueue'])
-                cells.append(status['flushes'])
-                cells.append((status['currentConn'], status['totalConn']))
-                cells.append((status['bytesIn'], status['bytesOut']))
-                cells.append((status['residentMem'], status['mappedMem']))
-                if 'pageFault' in status:
-                    cells.append(status['pageFault'])
+                oldStatus = self.__oldStatus[server] if server in self.__oldStatus else status
+                sec = status.deepgetDiff(oldStatus, 'uptimeMillis') / 1000.0
+                if not sec:
+                    sec = 1
+
+                operations = sum(status.deepgetDiff(oldStatus, 'opcounters', k) for k in status.deepget('opcounters'))
+                connectionsCurrent = status.deepget('connections', 'current') or 0
+                connectionsAvailable = status.deepget('connections', 'available') or 0
+
+                cells.append(operations / sec)
+                cells.append(status.deepget('globalLock', 'activeClients', 'total'))
+                cells.append(status.deepget('globalLock', 'currentQueue', 'total'))
+                cells.append(status.deepgetDiff(oldStatus, 'backgroundFlushing', 'flushes') / sec)
+                cells.append([connectionsCurrent, connectionsCurrent + connectionsAvailable])
+                cells.append(status.deepget('network', ('bytesIn', 'bytesOut')))
+                cells.append([v * 10**6 for v in status.deepget('mem', ('resident', 'mapped'))])
+                cells.append(status.deepgetDiff(oldStatus, 'extra_info', 'page_faults') / sec)
+
+                self.__oldStatus[server] = status
             else:
                 cells.append(server.lastError())
 
@@ -84,10 +95,10 @@ class ReplicationInfoBlock(ServerBasedBlock):
             if replicationInfo:
                 cells = []
                 cells.append(server)
-                source = self.findServer(replicationInfo['source']) or replicationInfo['source']
-                cells.append((replicationInfo['sourceType'], source))
-                cells.append(replicationInfo['syncedTo'])
-                cells.append(replicationInfo['increment'])
+                source = self.findServer(replicationInfo.get('host')) or replicationInfo.get('host')
+                cells.append([replicationInfo.get('source'), source])
+                cells.append(replicationInfo.get('syncedTo').as_datetime())
+                cells.append(replicationInfo.get('syncedTo').inc)
 
                 lines.append(cells)
             else:
@@ -118,15 +129,13 @@ class ReplicaSetMemberBlock(ServerBasedBlock):
             if replicaSetMembers:
                 for member in replicaSetMembers:
                     cells = []
-                    cells.append(self.findServer(member['name']) or member['name'])
-                    cells.append(member['set'])
-                    cells.append(member['state'])
-                    cells.append(member['uptime'])
-                    cells.append(member['ping'])
-                    if 'lag' in member:
-                        cells.append(member['lag'])
-                    if 'optime' in member:
-                        cells.append(member['optime'])
+                    cells.append(self.findServer(member.get('name')) or member.get('name'))
+                    cells.append(member.get('set'))
+                    cells.append(member.get('stateStr'))
+                    cells.append(member.get('uptime'))
+                    cells.append(member.get('pingMs'))
+                    cells.append(member['date'] - member['optimeDate'] if 'optimeDate' in member else None)
+                    cells.append(member.get('optime'))
 
                     self.__lines.append(cells)
             else:
@@ -208,35 +217,35 @@ class OperationBlock(Block):
         for server in self.__servers:
             if server.connected():
                 hideReplicationOperations = server not in self.__replicationOperationServers
-                for operation in server.currentOperations(hideReplicationOperations):
+                for op in server.currentOperations(hideReplicationOperations):
                     cells = []
                     cells.append(server)
-                    cells.append(operation['opid'] if 'opid' in operation else '')
-                    cells.append(operation['client'] if 'client' in operation else '')
-                    cells.append(operation['op'] if 'op' in operation else '')
-                    cells.append(operation['secs_running'] if 'secs_running' in operation else '')
+                    cells.append(str(op.get('opid')))
+                    cells.append(op.get('client'))
+                    cells.append(op.get('op'))
+                    cells.append(op.get('secs_running'))
 
                     locks = []
-                    if 'waitingForLock' in operation and operation['waitingForLock']:
+                    if op.get('waitingForLock'):
                         locks.append('waiting')
-                    if 'locks' in operation:
-                        if '^' in operation['locks']:
+                    if 'locks' in op:
+                        if '^' in op['locks']:
                             """Do not show others if global lock exist."""
-                            locks.append(operation['locks']['^'])
+                            locks.append(op['locks']['^'])
                         else:
-                            for ns, lock in operation['locks'].items():
+                            for ns, lock in op['locks'].items():
                                 locks.append(lock + ' on ' + ns[1:])
-                    elif 'lockType' in operation:
-                        locks.append(operation['lockType'])
+                    elif 'lockType' in op:
+                        locks.append(op['lockType'])
 
                     cells.append(locks)
-                    cells.append(operation['ns'] if 'ns' in operation else '')
-                    if 'query' in operation:
+                    cells.append(op.get('ns'))
 
-                        if '$msg' in operation['query']:
-                            cells.append(operation['query']['$msg'])
+                    if 'query' in op:
+                        if '$msg' in op['query']:
+                            cells.append(op['query']['$msg'])
                         else:
-                            cells.append(Query(**operation['query']))
+                            cells.append(Query(**op['query']))
 
                     self.__lines.append(cells)
 

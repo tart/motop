@@ -32,6 +32,7 @@ import fcntl
 import select
 import signal
 import time
+import numbers
 from datetime import datetime
 
 class Console:
@@ -136,11 +137,22 @@ class Block:
     def __len__(self):
         return len(self.__lines)
 
+    fixes = 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'
+
     def __cell(self, value):
-        if isinstance(value, tuple) or isinstance(value, list):
-            return ' / '.join(self.__cell(value) for value in value)
+        if isinstance(value, list):
+            return ' / '.join(self.__cell(v) for v in value)
+
+        if isinstance(value, numbers.Number):
+            """Extents int to show big numbers human readable."""
+            for fix in ('',) + self.fixes:
+                if value < 10000:
+                    return str(int(value)) + fix
+                value = round(value / 1000)
+
         if value is not None:
             return str(value)
+
         return ''
 
     def __printLine(self, line, leftWidth, bold=False):

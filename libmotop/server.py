@@ -20,7 +20,6 @@ import os
 import sys
 import time
 import pymongo
-from datetime import datetime, timedelta
 
 class Server:
     defaultPort = 27017
@@ -31,7 +30,6 @@ class Server:
         self.__address = address
         self.__username = username
         self.__password = password
-        self.__oldValues = {}
         self.__connect()
 
     def __connect(self):
@@ -84,50 +82,13 @@ class Server:
     def lastError(self):
         return self.__lastError
 
-    def __statusChangePerSecond(self, name, value):
-        """Calculate the difference of the value in one second with the last time by using time difference calculated
-        on __getStatus."""
-        oldValue = self.__oldValues[name] if name in self.__oldValues else None
-        self.__oldValues[name] = value
-        if oldValue:
-            timespanSeconds = self.__timespan.seconds + (self.__timespan.microseconds / 10.0**6)
-            return Value((value - oldValue) / timespanSeconds)
-        return 0
-
     def status(self):
-        """Get serverStatus from MongoDB, calculate time difference with the last time."""
-        status = self.__execute(self.__connection.admin.command, 'serverStatus')
-        oldCheckTime = self.__oldValues['checkTime'] if 'checkTime' in self.__oldValues else None
-        self.__oldValues['checkTime'] = datetime.now()
-        if oldCheckTime:
-            self.__timespan = self.__oldValues['checkTime'] - oldCheckTime
-
-        values = {}
-        opcounters = status['opcounters']
-        values['qPS'] = self.__statusChangePerSecond('qPS', sum(opcounters.values()))
-        values['activeClients'] = Value(status['globalLock']['activeClients']['total'])
-        values['currentQueue'] = Value(status['globalLock']['currentQueue']['total'])
-        values['flushes'] = self.__statusChangePerSecond('flushes', status['backgroundFlushing']['flushes'])
-        values['currentConn'] = Value(status['connections']['current'])
-        values['totalConn'] = Value(status['connections']['available'] + status['connections']['current'])
-        values['bytesIn'] = self.__statusChangePerSecond('bytesIn', status['network']['bytesIn'])
-        values['bytesOut'] = self.__statusChangePerSecond('bytesOut', status['network']['bytesOut'])
-        values['residentMem'] = Value(status['mem']['resident'] * 10**6)
-        values['mappedMem'] = Value(status['mem']['mapped'] * 10**6)
-        if 'page_faults' in status['extra_info']:
-            values['pageFault'] = self.__statusChangePerSecond('pageFault', status['extra_info']['page_faults'])
-        return values
+        return Result(self.__execute(self.__connection.admin.command, 'serverStatus'))
 
     def replicationInfo(self):
         """Find replication source from the local collection."""
         for source in self.__executeYield(self.__connection.local.sources.find):
-            values = {}
-            values['source'] = source['host']
-            values['sourceType'] = source['source']
-            syncedTo = source['syncedTo']
-            values['syncedTo'] = syncedTo.as_datetime()
-            values['increment'] = syncedTo.inc
-            return values
+            return Result(source)
 
     def replicaSetMembers(self):
         """Execute replSetGetStatus operation on the server. Filter arbiters. Calculate the lag. Add relation to the
@@ -137,30 +98,24 @@ class Server:
         except pymongo.errors.OperationFailure: pass
         else:
             for member in replicaSetStatus['members']:
-                if 'statusStr' not in member or member['statusStr'] not in ['ARBITER']:
-                    values = {}
-                    values['set'] = replicaSetStatus['set']
-                    values['name'] = member['name']
-                    values['state'] = member['stateStr']
-                    values['uptime'] = timedelta(seconds=member['uptime']) if 'uptime' in member else None
-                    values['ping'] = member['pingMs'] if 'pingMs' in member else None
-                    if 'optime' in member and 'optimeDate' in member:
-                        values['lag'] = replicaSetStatus['date'] - member['optimeDate']
-                        values['optime'] = member['optime']
-                    yield values
+                if member.get('statusStr') not in ['ARBITER']:
+                    member['set'] = replicaSetStatus.get('set')
+                    values['date'] = replicaSetStatus.get('date')
+
+                    yield Result(member)
 
     def currentOperations(self, hideReplicationOperations=False):
         """Execute currentOp operation on the server. Filter and yield returning operations."""
         for op in self.__execute(self.__connection.admin.current_op)['inprog']:
             if hideReplicationOperations:
-                if op['op'] == 'getmore' and 'local.oplog.' in op['ns']:
+                if op.get('op') == 'getmore' and op.get('ns').startswith('local.oplog.'):
                     """Condition to find replication operation on the master."""
                     continue
-                if op['op'] and op['ns'] in ('', 'local.sources'):
-                    """Condition to find replication operation on the slave. Do not look for more replication
-                    operations if one found."""
+                if op.get('op') and op.get('ns') in ('', 'local.sources'):
+                    """Condition to find replication operation on the slave."""
                     continue
-            yield op
+
+            yield Result(op)
 
     def explainQuery(self, namespace, findParameters):
         databaseName, collectionName = namespace.split('.', 1)
@@ -181,14 +136,22 @@ class Server:
         exitCode = os.system(command)
         return exitCode == 0
 
-class Value(int):
-    """Class extents int to show big numbers human readable."""
-    fixes = 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'
+class Result(dict):
+    def deepget(self, arg, *args):
+        if isinstance(arg, tuple):
+            return [self.deepget(a, *args) for a in arg]
 
-    def __str__(self):
-        value = self
-        for fix in ('',) + self.fixes:
-            if value < 10000:
-                return str(int(value)) + fix
-            value = round(value / 1000)
+        if arg in self:
+            if args:
+                return Result(self[arg]).deepget(*args)
+            return self[arg]
+
+        return None
+
+    def deepgetDiff(self, other, *args):
+        value = self.deepget(*args)
+        otherValue = other.deepget(*args)
+        if value and otherValue:
+            return value - otherValue
+        return 0
 
