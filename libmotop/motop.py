@@ -54,43 +54,40 @@ def parseArguments():
             help='seconds to kill operations automatically')
     return parser.parse_args()
 
-def commonHosts(config, arguments):
-    hosts = []
+def commonServers(config, arguments):
+    """First try to match servers on the config with the ones on the arguments."""
+    servers = []
     for host in arguments.hosts:
         for section in config.sections():
-            if section == host or config.get(section, 'address') == host:
-                self.__sections.append(section)
-    if not hosts:
-        """If none of the hosts match the sections in the config, do not use hosts."""
-        return config.sections()
-    return hosts
+            if section == host:
+                servers.append(Server(section, **dict(config.items(section))))
+    if servers:
+        return servers
 
-def chooseServers(config, arguments, choice):
-    """Return servers for the given choice if they are in config, return all if config does not
-    exists."""
-    if not config.sections():
-        return [Server(host, host, arguments.username, arguments.password) for host in arguments.hosts]
+    """Second use the servers on the config."""
+    if config.sections():
+        return [Server(section, **dict(config.items(section))) for section in config.sections()]
 
-    servers = []
-    for section in commonHosts(config, arguments):
-        if config.sections():
-            if not config.has_option(section, choice) or config.getboolean(section, choice):
-                address = config.get(section, 'address')
-                username = config.get(section, 'username') if config.has_option(section, 'username') else None
-                password = config.get(section, 'password') if config.has_option(section, 'password') else None
-                servers.append(Server(section, address, username, password))
-    return servers
+    """Third use the servers on the arguments."""
+    return [Server(host, host, arguments.username, arguments.password) for host in arguments.hosts]
 
 def run():
     """Get the arguments and parse the config file. Activate console. Get servers from the config file
     or from arguments. Show the query screen."""
     arguments = parseArguments()
-    config = SafeConfigParser()
+    config = SafeConfigParser({'username': arguments.username, 'password': arguments.password})
     config.read(arguments.conf)
+    servers = commonServers(config, arguments)
 
     chosenServers = {}
     for choice in choices:
-        chosenServers[choice] = chooseServers(config, arguments, choice)
+        if config.sections():
+            chosenServers[choice] = []
+            for server in servers:
+                if not config.has_option(str(server), choice) or config.getboolean(str(server), choice):
+                    chosenServers[choice].append(server)
+        else:
+            chosenServers[choice] = servers
 
     with Console() as console:
         queryScreen = QueryScreen(console, chosenServers, autoKillSeconds=arguments.autoKillSeconds)
