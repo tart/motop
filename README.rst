@@ -38,6 +38,10 @@ k   Kill operation using "mongo" executable
 
 K   Kill operations older than given seconds using "mongo" executable
 
+r   Try to reconnect to disconnected servers
+
+R   Try to reconnect to all servers
+
 
 Dependencies
 ------------

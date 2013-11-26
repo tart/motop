@@ -287,6 +287,7 @@ class OperationBlock(Block):
 class QueryScreen:
     def __init__(self, console, chosenServers, autoKillSeconds=None):
         self.__console = console
+        self.__servers = set(server for servers in chosenServers.values() for server in servers)
 
         self.__blocks = []
         self.__blocks.append(StatusBlock(chosenServers['status']))
@@ -330,4 +331,10 @@ class QueryScreen:
                     self.__operationBlock.batchKill(*inputValues)
             if self.__autoKillSeconds is not None:
                 self.__operationBlock.batchKill(self.__autoKillSeconds)
+
+            "Reconnect actions:"
+            if button in ('r', 'R'):
+                for server in self.__servers:
+                    if button == 'R' or not server.connected():
+                        server.tryToConnect()
 
