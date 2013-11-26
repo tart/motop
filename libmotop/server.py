@@ -22,25 +22,23 @@ import time
 import pymongo
 
 class Server:
-    defaultPort = 27017
-    readPreference = pymongo.ReadPreference.SECONDARY
-
     def __init__(self, name, address, username=None, password=None):
         self.__name = name
         self.__address = address
         self.__username = username
         self.__password = password
-        self.__connect()
+        self.tryToConnect()
 
-    def __connect(self):
+    connectionClass = pymongo.MongoClient if pymongo.version_tuple >= (2, 4) else pymongo.Connection
+    connectionParemeters = {'connectTimeoutMS': 1000, 'read_preference': pymongo.ReadPreference.SECONDARY}
+
+    def tryToConnect(self):
+        self.__connection = None
         try:
-            if pymongo.version_tuple >= (2, 4):
-                self.__connection = pymongo.MongoClient(self.__address, read_preference=self.readPreference)
-            else:
-                self.__connection = pymongo.Connection(self.__address, read_preference=self.readPreference)
-        except pymongo.errors.AutoReconnect as error:
-            self.__connection = None
+            self.__connection = self.connectionClass(self.__address, **self.connectionParemeters)
+        except pymongo.errors.ConnectionFailure as error:
             self.__lastError = error
+
         if self.__username and self.__password:
             self.__connection.admin.authenticate(self.__username, self.__password)
 
@@ -52,12 +50,12 @@ class Server:
             return True
         if self.__address == name:
             return True
-        if ':' not in self.__address and self.__address + ':' + str(self.defaultPort) == name:
+        if ':' not in self.__address and self.__address + ':' + str(self.connectionClass.PORT) == name:
             return True
         return False
 
     def connected(self):
-        return bool(self.__connection)
+        return self.__connection is not None
 
     def __execute(self, procedure, *args, **kwargs):
         """Try 10 times to execute the procedure."""
@@ -83,7 +81,11 @@ class Server:
         return self.__lastError
 
     def status(self):
-        return Result(self.__execute(self.__connection.admin.command, 'serverStatus'))
+        if self.connected():
+            result = self.__execute(self.__connection.admin.command, 'serverStatus')
+
+            if result:
+                return Result(result)
 
     def replicationInfo(self):
         """Find replication source from the local collection."""

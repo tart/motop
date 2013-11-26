@@ -39,8 +39,8 @@ class StatusBlock(Block):
         for server in self.__servers:
             cells = []
             cells.append(server)
-            if server.connected():
-                status = server.status()
+            status = server.status()
+            if status:
                 oldStatus = self.__oldStatus[server] if server in self.__oldStatus else status
                 sec = status.deepgetDiff(oldStatus, 'uptimeMillis') / 1000.0
                 if not sec:
