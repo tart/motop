@@ -67,7 +67,7 @@ class Server:
                 time.sleep(0.1)
             except pymongo.errors.OperationFailure as error:
                 self.__lastError = error
-                raise
+                break
 
     def __executeYield(self, *args, **kwargs):
         """Execute the procedure and yield items until get next item fails."""
@@ -95,10 +95,8 @@ class Server:
     def replicaSetMembers(self):
         """Execute replSetGetStatus operation on the server. Filter arbiters. Calculate the lag. Add relation to the
         member which is the server itself. Return the replica set."""
-        try:
-            replicaSetStatus = self.__execute(self.__connection.admin.command, 'replSetGetStatus')
-        except pymongo.errors.OperationFailure: pass
-        else:
+        replicaSetStatus = self.__execute(self.__connection.admin.command, 'replSetGetStatus')
+        if replicaSetStatus:
             for member in replicaSetStatus['members']:
                 if member.get('statusStr') not in ['ARBITER']:
                     member['set'] = replicaSetStatus.get('set')
