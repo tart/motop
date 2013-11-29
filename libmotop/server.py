@@ -106,16 +106,18 @@ class Server:
 
     def currentOperations(self, hideReplicationOperations=False):
         """Execute currentOp operation on the server. Filter and yield returning operations."""
-        for op in self.__execute(self.__connection.admin.current_op)['inprog']:
-            if hideReplicationOperations:
-                if op.get('op') == 'getmore' and op.get('ns').startswith('local.oplog.'):
-                    """Condition to find replication operation on the master."""
-                    continue
-                if op.get('op') and op.get('ns') in ('', 'local.sources'):
-                    """Condition to find replication operation on the slave."""
-                    continue
+        operations = self.__execute(self.__connection.admin.current_op)
+        if operations:
+            for op in operations['inprog']:
+                if hideReplicationOperations:
+                    if op.get('op') == 'getmore' and op.get('ns').startswith('local.oplog.'):
+                        """Condition to find replication operation on the master."""
+                        continue
+                    if op.get('op') and op.get('ns') in ('', 'local.sources'):
+                        """Condition to find replication operation on the slave."""
+                        continue
 
-            yield Result(op)
+                yield Result(op)
 
     def explainQuery(self, namespace, findParameters):
         databaseName, collectionName = namespace.split('.', 1)
