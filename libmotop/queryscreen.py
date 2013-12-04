@@ -56,7 +56,7 @@ class StatusBlock(Block):
                 cells.append(status.deepgetDiff(oldStatus, 'backgroundFlushing', 'flushes') / sec)
                 cells.append([connectionsCurrent, connectionsCurrent + connectionsAvailable])
                 cells.append(status.deepget('network', ('bytesIn', 'bytesOut')))
-                cells.append([v * 10**6 for v in status.deepget('mem', ('resident', 'mapped'))])
+                cells.append([v * 10**6 for v in status.deepget('mem', ('resident', 'mapped')) if v is not None])
                 cells.append(status.deepgetDiff(oldStatus, 'extra_info', 'page_faults') / sec)
 
                 self.__oldStatus[server] = status
