@@ -301,11 +301,14 @@ class QueryScreen:
     def action(self):
         """Reset the blocks, refresh the console, perform actions for the pressed button."""
         button = None
+        counter = 0
+
         while button != 'q':
             for block in self.__blocks:
                 block.reset()
             self.__console.refresh(self.__blocks)
             button = self.__console.checkButton(1)
+            counter += 1
 
             "Pause:"
             if button == 'p':
@@ -333,7 +336,7 @@ class QueryScreen:
                 self.__operationBlock.batchKill(self.__autoKillSeconds)
 
             "Reconnect actions:"
-            if button in ('r', 'R'):
+            if button in ('r', 'R') or counter % 20 == 0:
                 for server in self.__servers:
                     if button == 'R' or not server.connected():
                         server.tryToConnect()
