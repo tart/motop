@@ -134,3 +134,11 @@ Motop 3.1
 * Rename column State of the operation block
 * Show locks with operations
 
+Motop 4.0
+
+* Avoid crash on missing data from server
+* Aviod crash on connection failures
+* Add reconnect buttons
+* Try to reconnect to disconnected servers after every 20 refreshes
+* Use username, password from the configuration instead of from the arguments
+
