@@ -142,3 +142,7 @@ Motop 4.0
 * Try to reconnect to disconnected servers after every 20 refreshes
 * Use username, password from the configuration instead of from the arguments
 
+Motop 4.1
+
+* Avoid crash on replica set view
+
