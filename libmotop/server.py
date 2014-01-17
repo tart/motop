@@ -100,7 +100,7 @@ class Server:
             for member in replicaSetStatus['members']:
                 if member.get('statusStr') not in ['ARBITER']:
                     member['set'] = replicaSetStatus.get('set')
-                    values['date'] = replicaSetStatus.get('date')
+                    member['date'] = replicaSetStatus.get('date')
 
                     yield Result(member)
 

@@ -97,8 +97,9 @@ class ReplicationInfoBlock(ServerBasedBlock):
                 cells.append(server)
                 source = self.findServer(replicationInfo.get('host')) or replicationInfo.get('host')
                 cells.append([replicationInfo.get('source'), source])
-                cells.append(replicationInfo.get('syncedTo').as_datetime())
-                cells.append(replicationInfo.get('syncedTo').inc)
+                if replicationInfo.get('syncedTo'):
+                    cells.append(replicationInfo['syncedTo'].as_datetime())
+                    cells.append(replicationInfo['syncedTo'].inc)
 
                 lines.append(cells)
             else:
