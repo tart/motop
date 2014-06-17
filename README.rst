@@ -12,6 +12,10 @@ Install with easy_install::
 
     easy_install motop
 
+Install with pip::
+
+    pip install git+https://github.com/tart/motop.git
+
 Download and install::
 
     ./setup.py install
