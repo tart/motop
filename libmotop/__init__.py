@@ -15,5 +15,5 @@
 ##
 
 __name__ = 'motop'
-__version__ = 4.1
+__version__ = 4.2
 __doc__ = '"Top" clone for MongoDB.'

@@ -150,3 +150,6 @@ Motop 4.1
 
 * Avoid crash on replica set view
 
+Motop 4.2
+
+* Support installation with `pip`
