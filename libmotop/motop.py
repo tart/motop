@@ -27,9 +27,7 @@ except ImportError:
     from configparser import SafeConfigParser
 
 """Metadata"""
-__name__ = 'motop'
-__version__ = 4.1
-__doc__ = '"Top" clone for MongoDB.'
+from libmotop import __name__, __version__, __doc__
 
 """Main configuration"""
 configFile = '/etc/motop.conf'
