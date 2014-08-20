@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
 from setuptools import setup
-from libmotop import motop
+import libmotop
 
 def readme():
     with open('README.rst') as readmeFile:
         return readmeFile.read()
 
-setup(name=motop.__name__,
-        version=str(motop.__version__),
+setup(name=libmotop.__name__,
+        version=str(libmotop.__version__),
         packages=('libmotop',),
         scripts=('motop',),
         install_requires=('pymongo', 'argparse'),
@@ -17,7 +17,7 @@ setup(name=motop.__name__,
         license='ICS',
         url='https://github.com/tart/motop',
         platforms='POSIX',
-        description=motop.__doc__,
+        description=libmotop.__doc__,
         keywords='mongo realtime monitoring examine explain kill operations',
         long_description=readme())
 
